@@ -1,0 +1,13 @@
+# Python virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# Robot Framework output artifacts
+output.xml
+log.html
+report.html
+*.log
+
+# macOS
+.DS_Store
