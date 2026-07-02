@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robotframework-nsxt"
+version = "0.1.0"
+description = "Robot Framework library for testing VMware NSX-T: Policy/Management API keywords and structured data-plane probing"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["robotframework", "nsx-t", "nsxt", "vmware", "network-testing", "sdn"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: Robot Framework",
+    "Framework :: Robot Framework :: Library",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "robotframework>=6.1",
+    "RESTinstance>=1.3.0",
+    "robotframework-sshlibrary>=3.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/asnd/nsxt-robot"
+Repository = "https://github.com/asnd/nsxt-robot"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "robotframework-robocop>=8.0.0",
+    "PyYAML>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nsxt_robot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests_unit"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+ignore_missing_imports = true
+
+[tool.robocop.lint]
+# Robot lines may run to 130 chars: the long lines are irreducible NSX REST API
+# paths and one Evaluate comprehension. Python code stays at 120 (ruff).
+configure = ["line-too-long.line_length=130"]
+# Curated rule set. Rules below are intentionally disabled with rationale; the
+# rest of Robocop's defaults are enforced (import order, line length, real
+# unused vars, etc.) and kept green in CI.
+ignore = [
+    "DEPR05",  # `Set Variable` over VAR syntax — VAR is RF7+; we support RF>=6.1
+    "DEPR06",  # `Create List` over VAR syntax — same RF6 compatibility reason
+    "TAG05",   # shared tags — per-test tags duplicated from Test Tags are intentional
+    "TAG06",   # redundant tag — kept per test for readable tag-based filtering
+    "NAME02",  # keyword case — 'bbprobe' is a binary/proper-noun, not title-case
+    "NAME18",  # keyword case — same 'bbprobe' naming
+    "ARG07",   # args per continuation line — multi-arg lines are deliberate layout
+    "ORD03",   # section order — helper Keywords are defined before Test Cases by design
+    "MISC06",  # .robot vs .resource — RF accepts Resource of .robot; avoids churn
+    "MISC09",  # inline IF — block IF is clearer for these guards
+    "VAR05",   # suite-scoped variable — intentional in the HA VIP suite
+    "DOC01",   # missing docs — only flagged on self-descriptive Setup/Teardown keywords
+    "LEN03",   # keywords-per-keyword — these composite keywords are cohesive
+    "LEN07",   # args-per-keyword — NSX API keywords legitimately need their arguments
+    "LEN28",   # file length — policy_api.robot is a single cohesive API wrapper
+    "VAR02",   # unused var — positional multi-return capture makes middle values unavoidable
+]

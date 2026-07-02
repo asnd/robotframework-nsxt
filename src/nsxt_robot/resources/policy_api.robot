@@ -16,9 +16,11 @@ Create T1 Gateway
     [Documentation]    Create or update a Tier-1 gateway linked to T0.
     ...    route_adv_types accepts a list such as: TIER1_CONNECTED  TIER1_STATIC_ROUTES
     [Arguments]    ${id}    ${display_name}    ${t0_path}    @{route_adv_types}
-    ${adv}=    Run Keyword If    len($route_adv_types) > 0
-    ...    Set Variable    ${route_adv_types}
-    ...    ELSE    Create List    TIER1_CONNECTED
+    IF    len($route_adv_types) > 0
+        ${adv}=    Set Variable    ${route_adv_types}
+    ELSE
+        ${adv}=    Create List    TIER1_CONNECTED
+    END
     ${body}=    Create Dictionary
     ...    display_name=${display_name}
     ...    tier0_path=${t0_path}
@@ -141,10 +143,11 @@ Delete BGP Neighbor On T0
     ...    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${locale_service_id}/bgp/neighbors/${neighbor_id}
 
 Get BGP Routes On T0
-    [Documentation]    Retrieve BGP routes learned on the T0 gateway.
-    [Arguments]    ${t0_id}    ${locale_service_id}
+    [Documentation]    Retrieve BGP routes learned from a specific neighbor on the T0 gateway.
+    ...    Routes are reported per neighbor, not for the gateway as a whole.
+    [Arguments]    ${t0_id}    ${locale_service_id}    ${neighbor_id}
     ${body}=    NSX REST GET
-    ...    ${POLICY_BASE}/infra/tier-0s/${t0_id}/locale-services/${locale_service_id}/bgp/neighbors/routes
+    ...    ${POLICY_BASE}/infra/tier-0s/${t0_id}/locale-services/${locale_service_id}/bgp/neighbors/${neighbor_id}/routes
     RETURN    ${body}
 
 # ──────────────────────────────────────────────
@@ -157,11 +160,12 @@ Create HA VIP Config On T0
     ${vip_config}=    Create Dictionary
     ...    vip_subnets=@{EMPTY}
     ...    enabled=${True}
-    ${subnet}=    Create Dictionary    prefix_len=${vip_ip.split('/')[1]}    ip_addresses=@{["${vip_ip.split('/')[0]}"]}
+    ${vip_ip_list}=    Create List    ${vip_ip.split('/')[0]}
+    ${subnet}=    Create Dictionary    prefix_len=${vip_ip.split('/')[1]}    ip_addresses=${vip_ip_list}
     ${vip_subnets}=    Create List    ${subnet}
     Set To Dictionary    ${vip_config}    vip_subnets=${vip_subnets}
     ${edge_paths}=    Create List    ${edge_path_1}    ${edge_path_2}
-    Set To Dictionary    ${vip_config}    external_interface_info=${edge_paths}
+    Set To Dictionary    ${vip_config}    external_interface_paths=${edge_paths}
     ${ha_vip_configs}=    Create List    ${vip_config}
     ${body}=    Create Dictionary    ha_vip_configs=${ha_vip_configs}
     NSX REST PATCH
@@ -203,6 +207,26 @@ Create SNAT Rule On T1
     ...    ${body}
     Log    Created SNAT rule ${rule_id} on T1 ${t1_id}
 
+Create DNAT Rule On T1
+    [Documentation]    Create a DNAT rule on a Tier-1 gateway: inbound traffic to
+    ...    ${destination_ip} is translated to the internal ${translated_ip}. An optional
+    ...    ${translated_port} restricts the rule to a single service port.
+    [Arguments]    ${t1_id}    ${rule_id}    ${destination_ip}    ${translated_ip}    ${translated_port}=${EMPTY}
+    ${body}=    Create Dictionary
+    ...    display_name=${rule_id}
+    ...    action=DNAT
+    ...    destination_network=${destination_ip}
+    ...    translated_network=${translated_ip}
+    ...    enabled=${True}
+    ...    logging=${False}
+    IF    '${translated_port}' != '${EMPTY}'
+        Set To Dictionary    ${body}    translated_ports=${translated_port}
+    END
+    NSX REST PATCH
+    ...    ${INFRA_BASE}/tier-1s/${t1_id}/nat/USER/nat-rules/${rule_id}
+    ...    ${body}
+    Log    Created DNAT rule ${rule_id} on T1 ${t1_id}: ${destination_ip} → ${translated_ip}
+
 Delete NAT Rule On T1
     [Documentation]    Delete a NAT rule from a Tier-1 gateway.
     [Arguments]    ${t1_id}    ${rule_id}
@@ -237,8 +261,9 @@ Create LB Service
     Log    Created LB service: ${id}
 
 Create LB Pool
-    [Documentation]    Create an NSX LB server pool with members.
-    [Arguments]    ${id}    ${members}    ${port}
+    [Documentation]    Create an NSX LB server pool with members. When ${monitor_path} is
+    ...    provided the pool is bound to that active health monitor.
+    [Arguments]    ${id}    ${members}    ${port}    ${monitor_path}=${EMPTY}
     ${member_list}=    Create List
     FOR    ${member_ip}    IN    @{members}
         ${member}=    Create Dictionary
@@ -250,21 +275,61 @@ Create LB Pool
     ${body}=    Create Dictionary
     ...    display_name=${id}
     ...    members=${member_list}
+    IF    '${monitor_path}' != '${EMPTY}'
+        ${monitor_paths}=    Create List    ${monitor_path}
+        Set To Dictionary    ${body}    active_monitor_paths=${monitor_paths}
+    END
     NSX REST PATCH    ${INFRA_BASE}/lb-pools/${id}    ${body}
-    Log    Created LB pool: ${id}
+    Log    Created LB pool: ${id} (monitor: ${monitor_path})
+
+Create LB HTTP Monitor
+    [Documentation]    Create an active HTTP health monitor profile. The pool that binds it
+    ...    marks members UP only when they answer ${request_url} with one of ${response_codes}.
+    [Arguments]    ${id}    ${monitor_port}    ${request_url}=/    ${response_codes}=${{[200]}}
+    ${port_int}=    Convert To Integer    ${monitor_port}
+    ${body}=    Create Dictionary
+    ...    resource_type=LBHttpMonitorProfile
+    ...    display_name=${id}
+    ...    monitor_port=${port_int}
+    ...    request_url=${request_url}
+    ...    request_method=GET
+    ...    response_status_codes=${response_codes}
+    NSX REST PATCH    ${INFRA_BASE}/lb-monitor-profiles/${id}    ${body}
+    Log    Created LB HTTP monitor: ${id} (port ${monitor_port}, url ${request_url})
+
+Delete LB Monitor
+    [Documentation]    Delete an LB monitor profile.
+    [Arguments]    ${id}
+    Safe Delete Policy Object    ${INFRA_BASE}/lb-monitor-profiles/${id}
 
 Create LB Virtual Server
     [Documentation]    Create an NSX LB virtual server (TCP/L4).
     [Arguments]    ${id}    ${pool_path}    ${vip}    ${port}    ${lb_service_path}
+    ${ports}=    Create List    ${port}
     ${body}=    Create Dictionary
     ...    display_name=${id}
     ...    ip_address=${vip}
-    ...    ports=@{["${port}"]}
+    ...    ports=${ports}
     ...    pool_path=${pool_path}
     ...    lb_service_path=${lb_service_path}
     ...    application_profile_path=/infra/lb-app-profiles/default-tcp-lb-app-profile
     NSX REST PATCH    ${INFRA_BASE}/lb-virtual-servers/${id}    ${body}
     Log    Created LB virtual server: ${id}
+
+Create LB HTTP Virtual Server
+    [Documentation]    Create an NSX L7 HTTP virtual server (uses the default HTTP application
+    ...    profile, so the LB terminates and proxies HTTP rather than forwarding raw TCP).
+    [Arguments]    ${id}    ${pool_path}    ${vip}    ${port}    ${lb_service_path}
+    ${ports}=    Create List    ${port}
+    ${body}=    Create Dictionary
+    ...    display_name=${id}
+    ...    ip_address=${vip}
+    ...    ports=${ports}
+    ...    pool_path=${pool_path}
+    ...    lb_service_path=${lb_service_path}
+    ...    application_profile_path=/infra/lb-app-profiles/default-http-lb-app-profile
+    NSX REST PATCH    ${INFRA_BASE}/lb-virtual-servers/${id}    ${body}
+    Log    Created L7 HTTP LB virtual server: ${id}
 
 Get LB Pool Status
     [Documentation]    Retrieve operational status of an LB pool.
@@ -287,6 +352,125 @@ Delete LB Service
     [Documentation]    Delete an LB service.
     [Arguments]    ${id}
     Safe Delete Policy Object    ${INFRA_BASE}/lb-services/${id}
+
+# ──────────────────────────────────────────────
+# Tags
+# ──────────────────────────────────────────────
+
+Set Tags On Segment
+    [Documentation]    Replace the tag set on a segment. ${tags} is a list of
+    ...    scope|value strings, e.g.    Create List    app|web    tier|frontend
+    [Arguments]    ${segment_id}    @{tags}
+    ${tag_list}=    Create List
+    FOR    ${entry}    IN    @{tags}
+        ${scope}    ${value}=    Evaluate    ($entry.split('|', 1) + [''])[:2]
+        ${tag}=    Create Dictionary    scope=${scope}    tag=${value}
+        Append To List    ${tag_list}    ${tag}
+    END
+    ${body}=    Create Dictionary    tags=${tag_list}
+    NSX REST PATCH    ${INFRA_BASE}/segments/${segment_id}    ${body}
+    Log    Set tags on segment ${segment_id}: ${tags}
+
+# ──────────────────────────────────────────────
+# Groups (NSGroups)
+# ──────────────────────────────────────────────
+
+Create IP Group
+    [Documentation]    Create a group whose membership is a static set of IP addresses/CIDRs.
+    [Arguments]    ${group_id}    ${ip_addresses}    ${domain}=default
+    ${expr}=    Create Dictionary
+    ...    resource_type=IPAddressExpression
+    ...    ip_addresses=${ip_addresses}
+    ${expressions}=    Create List    ${expr}
+    ${body}=    Create Dictionary    display_name=${group_id}    expression=${expressions}
+    NSX REST PATCH    ${INFRA_BASE}/domains/${domain}/groups/${group_id}    ${body}
+    Log    Created IP group ${group_id}: ${ip_addresses}
+
+Create Tag Group
+    [Documentation]    Create a group with dynamic membership: VMs carrying the tag
+    ...    ${scope_value} (a scope|value string, e.g. app|web) join the group.
+    [Arguments]    ${group_id}    ${scope_value}    ${domain}=default
+    ${expr}=    Create Dictionary
+    ...    resource_type=Condition
+    ...    member_type=VirtualMachine
+    ...    key=Tag
+    ...    operator=EQUALS
+    ...    value=${scope_value}
+    ${expressions}=    Create List    ${expr}
+    ${body}=    Create Dictionary    display_name=${group_id}    expression=${expressions}
+    NSX REST PATCH    ${INFRA_BASE}/domains/${domain}/groups/${group_id}    ${body}
+    Log    Created tag group ${group_id}: VMs tagged '${scope_value}'
+
+Get Group
+    [Documentation]    Retrieve a group definition by ID.
+    [Arguments]    ${group_id}    ${domain}=default
+    ${body}=    NSX REST GET    ${INFRA_BASE}/domains/${domain}/groups/${group_id}
+    RETURN    ${body}
+
+Get Group Members
+    [Documentation]    Retrieve the effective (realized) VM members of a group.
+    [Arguments]    ${group_id}    ${domain}=default
+    ${body}=    NSX REST GET
+    ...    ${INFRA_BASE}/domains/${domain}/groups/${group_id}/members/virtual-machines
+    RETURN    ${body}
+
+Delete Group
+    [Documentation]    Delete a group by ID.
+    [Arguments]    ${group_id}    ${domain}=default
+    Safe Delete Policy Object    ${INFRA_BASE}/domains/${domain}/groups/${group_id}
+
+# ──────────────────────────────────────────────
+# Distributed Firewall (DFW)
+# ──────────────────────────────────────────────
+
+Create Security Policy
+    [Documentation]    Create (or update) an empty DFW security policy in a domain. Lower
+    ...    ${sequence_number} values are evaluated first relative to other policies.
+    [Arguments]    ${policy_id}    ${sequence_number}=10    ${category}=Application    ${domain}=default
+    ${body}=    Create Dictionary
+    ...    display_name=${policy_id}
+    ...    category=${category}
+    ...    sequence_number=${sequence_number}
+    NSX REST PATCH    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}    ${body}
+    Log    Created security policy ${policy_id} (category ${category})
+
+Create DFW Rule
+    [Documentation]    Create a distributed firewall rule inside a security policy.
+    ...    ${action} is ALLOW, DROP, or REJECT. ${source_groups}/${destination_groups}/${services}
+    ...    are lists of Policy paths (or ["ANY"]).
+    [Arguments]    ${policy_id}    ${rule_id}    ${source_groups}    ${destination_groups}
+    ...    ${action}=ALLOW    ${services}=${{['ANY']}}    ${sequence_number}=10    ${domain}=default
+    ${body}=    Create Dictionary
+    ...    display_name=${rule_id}
+    ...    source_groups=${source_groups}
+    ...    destination_groups=${destination_groups}
+    ...    services=${services}
+    ...    action=${action}
+    ...    direction=IN_OUT
+    ...    ip_protocol=IPV4_IPV6
+    ...    sequence_number=${sequence_number}
+    NSX REST PATCH
+    ...    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}/rules/${rule_id}
+    ...    ${body}
+    Log    Created DFW rule ${rule_id} (${action}) in policy ${policy_id}
+
+Get DFW Rules
+    [Documentation]    List the rules of a security policy.
+    [Arguments]    ${policy_id}    ${domain}=default
+    ${body}=    NSX REST GET
+    ...    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}/rules
+    RETURN    ${body}
+
+Delete DFW Rule
+    [Documentation]    Delete a single DFW rule from a security policy.
+    [Arguments]    ${policy_id}    ${rule_id}    ${domain}=default
+    Safe Delete Policy Object
+    ...    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}/rules/${rule_id}
+
+Delete Security Policy
+    [Documentation]    Delete a security policy (and all its rules) by ID.
+    [Arguments]    ${policy_id}    ${domain}=default
+    Safe Delete Policy Object    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}
 
 # ──────────────────────────────────────────────
 # Infra / Manager API

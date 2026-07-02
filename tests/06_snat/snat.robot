@@ -1,21 +1,23 @@
 *** Settings ***
-Documentation    SNAT end-to-end: create T1 and segment, configure SNAT rule, verify rule config
-...              and realization, then confirm traffic exits using the translated source IP.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
-Resource         ../../resources/traffic_keywords.robot
+Documentation    NAT end-to-end (SNAT + DNAT): create T1 and segment, configure an SNAT rule
+...              (outbound source translation) and a DNAT rule (inbound destination translation),
+...              verify rule config and realization, then confirm SNAT traffic exits using the
+...              translated source IP.
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
+Resource         nsxt_robot/resources/traffic_keywords.robot
 Suite Setup      SNAT Suite Setup
 Suite Teardown   SNAT Suite Teardown
-Test Tags        nat    snat
+Test Tags        nat
 
 
 *** Variables ***
 ${T1A_ID}               test-t1-snat
 ${SEG_A_ID}             test-seg-snat
 ${SNAT_RULE_ID}         test-snat-rule-1
+${DNAT_RULE_ID}         test-dnat-rule-1
 ${T1A_PATH}             /infra/tier-1s/${T1A_ID}
-${T0_PATH}              /infra/tier-0s/${T0_GATEWAY_ID}
-${OVERLAY_TZ_PATH}      /infra/sites/default/enforcement-points/default/transport-zones/${OVERLAY_TZ_ID}
+# ${T0_PATH} and ${OVERLAY_TZ_PATH} come from resources/common.robot
 ${SOURCE_NETWORK}       172.16.1.0/24
 
 
@@ -26,14 +28,19 @@ SNAT Suite Setup
     Create Overlay Segment    ${SEG_A_ID}    ${T1A_PATH}    ${OVERLAY_TZ_PATH}    ${T1A_SEGMENT_CIDR}
 
 SNAT Suite Teardown
-    Safe Delete Policy Object
+    Standard Suite Teardown
     ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}/nat/USER/nat-rules/${SNAT_RULE_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
+    ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}/nat/USER/nat-rules/${DNAT_RULE_ID}
+    ...    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
+    ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
 
 Verify SNAT Realized
     [Documentation]    Check realization for the SNAT NAT rule.
     Verify Realized    /infra/tier-1s/${T1A_ID}/nat/USER/nat-rules/${SNAT_RULE_ID}
+
+Verify DNAT Realized
+    [Documentation]    Check realization for the DNAT NAT rule.
+    Verify Realized    /infra/tier-1s/${T1A_ID}/nat/USER/nat-rules/${DNAT_RULE_ID}
 
 
 *** Test Cases ***
@@ -57,16 +64,11 @@ Create SNAT Rule On T1
     ...    ${SOURCE_NETWORK}
 
 Verify SNAT Rule Exists
-    [Documentation]    GET NAT rules on T1 and assert the SNAT rule is present with correct action.
+    [Documentation]    GET NAT rules on T1 and assert the SNAT rule is present with correct
+    ...                action and translated IP (single typed assertion via NsxtApi).
     [Tags]    nat    snat    config
     ${rules}=    Get NAT Rules On T1    ${T1A_ID}
-    ${rule_list}=    Get From Dictionary    ${rules}    results
-    ${rule_ids}=    Evaluate    [r.get('id', '') for r in ${rule_list}]
-    Should Contain    ${rule_ids}    ${SNAT_RULE_ID}
-    ${test_rule}=    Evaluate
-    ...    next(r for r in ${rule_list} if r.get('id') == '${SNAT_RULE_ID}')
-    Should Be Equal As Strings    ${test_rule['action']}    SNAT
-    Should Be Equal As Strings    ${test_rule['translated_network']}    ${SNAT_TRANSLATED_IP}
+    NAT Rule Should Exist    ${rules}    ${SNAT_RULE_ID}    action=SNAT    translated=${SNAT_TRANSLATED_IP}
     Log    SNAT rule verified: ${SOURCE_NETWORK} → ${SNAT_TRANSLATED_IP}
 
 Verify SNAT Rule Is Realized
@@ -83,3 +85,26 @@ Verify Traffic Uses Translated Source IP
     ...    ${VM1_IP}
     ...    ${EXTERNAL_TEST_IP}
     ...    ${SNAT_TRANSLATED_IP}
+
+Create DNAT Rule On T1
+    [Documentation]    Create a DNAT rule mapping inbound traffic for ${DNAT_DESTINATION_IP}
+    ...                to the internal server ${DNAT_TRANSLATED_IP}.
+    [Tags]    nat    dnat    config
+    Create DNAT Rule On T1
+    ...    ${T1A_ID}
+    ...    ${DNAT_RULE_ID}
+    ...    ${DNAT_DESTINATION_IP}
+    ...    ${DNAT_TRANSLATED_IP}
+
+Verify DNAT Rule Exists
+    [Documentation]    GET NAT rules on T1 and assert the DNAT rule is present with the correct
+    ...                action and translated (internal) IP.
+    [Tags]    nat    dnat    config
+    ${rules}=    Get NAT Rules On T1    ${T1A_ID}
+    NAT Rule Should Exist    ${rules}    ${DNAT_RULE_ID}    action=DNAT    translated=${DNAT_TRANSLATED_IP}
+    Log    DNAT rule verified: ${DNAT_DESTINATION_IP} → ${DNAT_TRANSLATED_IP}
+
+Verify DNAT Rule Is Realized
+    [Documentation]    Poll realization state for the DNAT rule until SUCCESS.
+    [Tags]    nat    dnat    realization
+    Wait Until Keyword Succeeds    2 min    10 sec    Verify DNAT Realized
