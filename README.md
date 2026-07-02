@@ -32,13 +32,16 @@ nsxt-robot/
     ├── 01_infra/  02_t1_connectivity/  03_static_routing/
     ├── 04_bgp_bfd/  05_ha_vip/  06_snat/  (SNAT + DNAT)  07_alb_l4/
     ├── 08_dfw/                  # distributed firewall micro-segmentation (groups, tags, allow/deny)
-    └── 09_alb_l7/               # L7 HTTP load balancer + active health monitor
+    ├── 09_alb_l7/               # L7 HTTP load balancer + active health monitor
+    └── 10_t0_vrf/               # T0-VRF gateway: uplink interface, static routing, BFD, BGP, EVPN
 ```
 
 Service coverage: infra health, T1 connectivity, static routing, BGP/BFD, HA VIP,
-NAT (SNAT + DNAT), L4 + L7 load balancing with health monitors, and distributed
-firewall micro-segmentation (IP + dynamic tag groups, allow/deny enforcement). Data-plane
-assertions include reachability, latency SLA, deny-path verification, and overlay MTU.
+NAT (SNAT + DNAT), L4 + L7 load balancing with health monitors, distributed
+firewall micro-segmentation (IP + dynamic tag groups, allow/deny enforcement), and
+Tier-0 VRF gateways (VRF-lite and EVPN: external interfaces, VRF static routing with
+BFD-protected next hops, VRF BGP, RD/RT/transit-VNI). Data-plane assertions include
+reachability, latency SLA, deny-path verification, and overlay MTU.
 
 ## Install
 
@@ -155,6 +158,28 @@ keywords parse and assert on them, replacing `Get From Dictionary` chains and
 | `NAT Rule Should Exist  rules  rule_id  [action]  [translated]` | Assert a NAT rule (SNAT/DNAT) exists with the expected fields |
 | `DFW Rule Should Have Action  rules  rule_id  action` | Assert a DFW rule exists with ALLOW/DROP/REJECT |
 | `Group Should Have Member  members  ip_or_name` | Assert a group's effective members include a VM by IP or name |
+
+## T0-VRF and EVPN (`policy_api.robot` + `tests/10_t0_vrf`)
+
+A T0-VRF is itself a tier-0 object, so every `... On T0` keyword (BGP, static routes,
+interfaces, locale services) works against a VRF's ID unchanged. On top of that:
+
+- `Create VRF Gateway On T0` — VRF-lite by default; optional `route_distinguisher`,
+  `import_rts`/`export_rts` (L2VPN_EVPN route targets), and `evpn_transit_vni` for EVPN.
+- `Create T0 Locale Service` / `Create T0 External Interface` — uplinks on VLAN segments
+  (`Create VLAN Segment`), pinned to an edge node via `Get Edge Nodes In Cluster`.
+- `Create Static Route On T0` + `Create BFD Profile` + `Create Static Route BFD Peer On T0`
+  — VRF static routing with BFD-withdrawn next hops.
+- `Enable BGP On T0 Locale Service` — for VRFs, which inherit the parent's ASN
+  (use `Configure BGP On T0` only on the parent/standalone T0).
+- `Create VNI Pool` / `Configure EVPN On T0` / `Create EVPN Tunnel Endpoint On T0` —
+  EVPN INLINE / ROUTE_SERVER enablement on the parent T0.
+
+The `tests/10_t0_vrf` suite runs the full lifecycle; its `evpn`-tagged tests mutate the
+**parent** T0 (EVPN mode persists after teardown) — exclude them with `-e evpn` on
+fabrics without EVPN. EVPN field names follow the NSX 4.x schemas and are the most
+version-sensitive part of the Policy API; verify against your release's API reference
+on the first live run.
 
 ## Keyword docs
 
