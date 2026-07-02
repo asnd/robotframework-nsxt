@@ -1,52 +1,34 @@
 *** Settings ***
 Documentation    SSH-based traffic validation keywords using SSHLibrary.
-Library          SSHLibrary
-Library          String
+...              Reachability checks (ping/tcp) delegate to the structured `bbprobe`
+...              keywords; body-content checks (source IP, response body) stay on curl.
 Library          Collections
-
-
-*** Variables ***
-${SSH_TIMEOUT}      30s
-${SSH_PROMPT}       $
+Library          String
+Library          SSHLibrary
+Resource         ssh_keywords.robot
+Resource         bbprobe_keywords.robot
 
 
 *** Keywords ***
-Open SSH To VM
-    [Documentation]    Open an SSH connection to a test VM.
-    [Arguments]    ${vm_ip}
-    Open Connection    ${vm_ip}    timeout=${SSH_TIMEOUT}    prompt=${SSH_PROMPT}
-    Login    ${VM_USER}    ${VM_PASSWORD}
-    Log    SSH connected to ${vm_ip}
-
-Close SSH From VM
-    [Documentation]    Close the active SSH connection.
-    Close Connection
-
 Run Command On VM
-    [Documentation]    Execute a shell command on a VM via SSH and return stdout.
+    [Documentation]    Execute a shell command on a VM via SSH and return stdout. Reuses a
+    ...                persistent connection per host (see Ensure SSH To VM).
     [Arguments]    ${vm_ip}    ${command}
-    Open SSH To VM    ${vm_ip}
+    Ensure SSH To VM    ${vm_ip}
     ${stdout}    ${stderr}    ${rc}=    Execute Command    ${command}    return_stderr=True    return_rc=True
-    Close SSH From VM
     Log    CMD: ${command} | RC: ${rc} | OUT: ${stdout} | ERR: ${stderr}
     RETURN    ${stdout}    ${stderr}    ${rc}
 
 Ping From VM
-    [Documentation]    SSH to a VM and ping a destination. Assert 0% packet loss.
+    [Documentation]    ICMP reachability from a VM. Delegates to bbprobe (icmp); passes if
+    ...                at least one of ${count} attempts succeeds (mirrors "not 100% loss").
     [Arguments]    ${vm_ip}    ${dest_ip}    ${count}=3
-    ${stdout}    ${stderr}    ${rc}=    Run Command On VM
-    ...    ${vm_ip}    ping -c ${count} -W 2 ${dest_ip}
-    Should Be Equal As Integers    ${rc}    0
-    Should Not Contain    ${stdout}    100% packet loss
-    Log    Ping from ${vm_ip} to ${dest_ip}: SUCCESS
+    Probe Should Succeed    ${vm_ip}    icmp    ${dest_ip}    --repeat ${count} --min-success 1
 
 Ping Should Fail From VM
-    [Documentation]    Assert that ping from a VM to a destination fails.
+    [Documentation]    Assert ICMP from a VM to a destination fails. Delegates to bbprobe.
     [Arguments]    ${vm_ip}    ${dest_ip}    ${count}=3
-    ${stdout}    ${stderr}    ${rc}=    Run Command On VM
-    ...    ${vm_ip}    ping -c ${count} -W 2 ${dest_ip}
-    Should Not Be Equal As Integers    ${rc}    0
-    Log    Ping from ${vm_ip} to ${dest_ip}: FAILED as expected
+    Probe Should Fail    ${vm_ip}    icmp    ${dest_ip}    --repeat ${count} --deadline 6s --timeout 2s
 
 Curl From VM
     [Documentation]    SSH to a VM and perform an HTTP request. Assert expected HTTP status code.
@@ -57,12 +39,24 @@ Curl From VM
     Log    Curl from ${vm_ip} to ${url}: HTTP ${stdout.strip()}
 
 TCP Connect From VM
-    [Documentation]    SSH to a VM and verify TCP connectivity to a host:port using nc.
+    [Documentation]    Verify TCP connectivity to host:port. Delegates to bbprobe (tcp_connect).
     [Arguments]    ${vm_ip}    ${dest_ip}    ${port}    ${timeout}=5
+    Probe Should Succeed    ${vm_ip}    tcp_connect    ${dest_ip}:${port}    --timeout ${timeout}s
+
+Verify Overlay MTU From VM
+    [Documentation]    Send a full-size, do-not-fragment ICMP packet from a VM to prove the
+    ...    overlay path carries a complete inner frame without fragmenting it. ${payload}=1472
+    ...    bytes + 28 (ICMP+IP headers) = a 1500-byte inner frame; the NSX TEP MTU (typically
+    ...    1600) must absorb the encapsulation overhead. Stays on ping: bbprobe cannot set the
+    ...    DF bit or payload size. Fails on packet loss or a "Frag needed"/"too long" response.
+    [Arguments]    ${vm_ip}    ${dest_ip}    ${payload}=1472    ${count}=3
     ${stdout}    ${stderr}    ${rc}=    Run Command On VM
-    ...    ${vm_ip}    nc -zv -w ${timeout} ${dest_ip} ${port} 2>&1 || true
-    Should Contain Any    ${stdout}    succeeded    open    Connected
-    Log    TCP connect from ${vm_ip} to ${dest_ip}:${port}: SUCCESS
+    ...    ${vm_ip}    ping -c ${count} -W 2 -M do -s ${payload} ${dest_ip}
+    Should Be Equal As Integers    ${rc}    0
+    ...    msg=DF-bit ping (${payload}B) ${vm_ip} → ${dest_ip} failed — overlay MTU too small or fragmenting
+    Should Not Contain    ${stdout}    100% packet loss
+    Should Not Contain Any    ${stdout}    Frag needed    Message too long
+    Log    Overlay MTU OK: ${vm_ip} → ${dest_ip} passed a ${payload}B DF-bit ICMP
 
 Verify Source IP From VM
     [Documentation]    Verify that traffic from a VM to dest_ip uses expected_src_ip as source.

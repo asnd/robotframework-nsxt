@@ -1,8 +1,8 @@
 *** Settings ***
 Documentation    HA VIP configuration on T0 gateway locale service: create, verify config,
 ...              verify realization. No failover testing (config-only validation).
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
 Suite Setup      HA VIP Suite Setup
 Suite Teardown   HA VIP Suite Teardown
 Test Tags        ha-vip    t0
@@ -37,8 +37,6 @@ Retrieve T0 Locale Service
 Create HA VIP On T0 Locale Service
     [Documentation]    Configure an HA VIP IP on the T0 locale service using existing edge paths.
     [Tags]    ha-vip    config
-    ${edge_interfaces}=    Get From Dictionary    ${LOCALE_SERVICE_BODY}    ha_vip_configs
-    ...    default=@{EMPTY}
     # Retrieve the first two interface paths from the locale service for HA VIP binding
     ${body}=    NSX REST GET
     ...    ${POLICY_BASE}/infra/tier-0s/${T0_GATEWAY_ID}/locale-services/${LOCALE_SERVICE_ID}/interfaces
