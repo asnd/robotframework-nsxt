@@ -2,6 +2,18 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.robocop_cache/
+
+# Local credentials/config (copy env.example.yaml -> env.yaml and edit)
+env.yaml
 
 # Robot Framework output artifacts
 output.xml
@@ -11,3 +23,4 @@ report.html
 
 # macOS
 .DS_Store
+docs/*.html
