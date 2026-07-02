@@ -44,9 +44,9 @@ DFW Suite Teardown
     # Order matters: rule + policy first, then groups, then topology.
     Standard Suite Teardown
     ...    ${POLICY_BASE}/infra/domains/default/security-policies/${DFW_POLICY_ID}
-    ...    ${SRC_GROUP_PATH}
-    ...    ${DST_GROUP_PATH}
-    ...    /infra/domains/default/groups/${TAG_GROUP_ID}
+    ...    ${POLICY_BASE}${SRC_GROUP_PATH}
+    ...    ${POLICY_BASE}${DST_GROUP_PATH}
+    ...    ${POLICY_BASE}/infra/domains/default/groups/${TAG_GROUP_ID}
     ...    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
     ...    ${POLICY_BASE}/infra/segments/${SEG_B_ID}
     ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}

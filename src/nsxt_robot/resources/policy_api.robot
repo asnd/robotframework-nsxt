@@ -56,6 +56,17 @@ Create Overlay Segment
     NSX REST PATCH    ${INFRA_BASE}/segments/${id}    ${body}
     Log    Created overlay segment: ${id}
 
+Create VLAN Segment
+    [Documentation]    Create a VLAN-backed segment on a VLAN transport zone. Used for
+    ...    T0/VRF external (uplink) interfaces. ${vlan_ids} is one or more VLAN IDs.
+    [Arguments]    ${id}    ${tz_path}    @{vlan_ids}
+    ${body}=    Create Dictionary
+    ...    display_name=${id}
+    ...    transport_zone_path=${tz_path}
+    ...    vlan_ids=${vlan_ids}
+    NSX REST PATCH    ${INFRA_BASE}/segments/${id}    ${body}
+    Log    Created VLAN segment: ${id} (VLANs ${vlan_ids})
+
 Delete Segment
     [Documentation]    Delete a segment by ID.
     [Arguments]    ${id}
@@ -97,8 +108,186 @@ Get Static Routes On T1
     RETURN    ${body}
 
 # ──────────────────────────────────────────────
+# T0 Gateways / VRF
+# ──────────────────────────────────────────────
+
+Get T0 Gateway
+    [Documentation]    Retrieve a Tier-0 gateway (or a T0-VRF gateway) by ID.
+    [Arguments]    ${id}
+    ${body}=    NSX REST GET    ${INFRA_BASE}/tier-0s/${id}
+    RETURN    ${body}
+
+Create VRF Gateway On T0
+    [Documentation]    Create (or update) a Tier-0 VRF gateway linked to a parent T0.
+    ...    A VRF is itself a tier-0 object, so every "... On T0" keyword (BGP, static
+    ...    routes, interfaces, locale services) also works against ${vrf_id}. The EVPN
+    ...    fields are optional: ${route_distinguisher} (e.g. 65001:100),
+    ...    ${import_rts}/${export_rts} (lists of ASN:nn route targets, L2VPN_EVPN
+    ...    address family), and ${evpn_transit_vni} (must belong to the parent's VNI
+    ...    pool). Plain VRF-lite needs only ${parent_t0_path}.
+    [Arguments]    ${vrf_id}    ${display_name}    ${parent_t0_path}    ${route_distinguisher}=${EMPTY}
+    ...            ${evpn_transit_vni}=${EMPTY}    ${import_rts}=${EMPTY}    ${export_rts}=${EMPTY}
+    ${vrf_config}=    Create Dictionary    tier0_path=${parent_t0_path}
+    IF    '${route_distinguisher}' != '${EMPTY}'
+        Set To Dictionary    ${vrf_config}    route_distinguisher=${route_distinguisher}
+    END
+    IF    $import_rts or $export_rts
+        ${rt}=    Create Dictionary    address_family=L2VPN_EVPN
+        IF    $import_rts
+            Set To Dictionary    ${rt}    import_route_targets=${import_rts}
+        END
+        IF    $export_rts
+            Set To Dictionary    ${rt}    export_route_targets=${export_rts}
+        END
+        ${rts}=    Create List    ${rt}
+        Set To Dictionary    ${vrf_config}    route_targets=${rts}
+    END
+    IF    '${evpn_transit_vni}' != '${EMPTY}'
+        ${vni}=    Convert To Integer    ${evpn_transit_vni}
+        Set To Dictionary    ${vrf_config}    evpn_transit_vni=${vni}
+    END
+    ${body}=    Create Dictionary    display_name=${display_name}    vrf_config=${vrf_config}
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${vrf_id}    ${body}
+    Log    Created VRF gateway ${vrf_id} linked to ${parent_t0_path}
+
+Delete VRF Gateway
+    [Documentation]    Delete a Tier-0 VRF gateway by ID.
+    [Arguments]    ${vrf_id}
+    Safe Delete Policy Object    ${INFRA_BASE}/tier-0s/${vrf_id}
+
+Create T0 Locale Service
+    [Documentation]    Create (or update) a locale service on a T0 or T0-VRF gateway.
+    ...    ${edge_cluster_path} is optional for a VRF (it inherits the parent's edge
+    ...    cluster) but required for a standalone T0.
+    [Arguments]    ${t0_id}    ${ls_id}=default    ${edge_cluster_path}=${EMPTY}
+    ${body}=    Create Dictionary    display_name=${ls_id}
+    IF    '${edge_cluster_path}' != '${EMPTY}'
+        Set To Dictionary    ${body}    edge_cluster_path=${edge_cluster_path}
+    END
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}    ${body}
+    Log    Created locale service ${ls_id} on T0 ${t0_id}
+
+Delete T0 Locale Service
+    [Documentation]    Delete a locale service from a T0 or T0-VRF gateway.
+    [Arguments]    ${t0_id}    ${ls_id}=default
+    Safe Delete Policy Object    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}
+
+Create T0 External Interface
+    [Documentation]    Create an EXTERNAL (uplink) interface on a T0 or T0-VRF locale
+    ...    service, attached to a VLAN segment. ${edge_path} pins the interface to a
+    ...    specific edge node (required for EXTERNAL interfaces).
+    [Arguments]    ${t0_id}    ${ls_id}    ${if_id}    ${segment_path}    ${ip_address}    ${prefix_len}
+    ...            ${edge_path}=${EMPTY}    ${mtu}=${EMPTY}
+    ${prefix_int}=    Convert To Integer    ${prefix_len}
+    ${ips}=    Create List    ${ip_address}
+    ${subnet}=    Create Dictionary    ip_addresses=${ips}    prefix_len=${prefix_int}
+    ${subnets}=    Create List    ${subnet}
+    ${body}=    Create Dictionary
+    ...    display_name=${if_id}
+    ...    type=EXTERNAL
+    ...    segment_path=${segment_path}
+    ...    subnets=${subnets}
+    IF    '${edge_path}' != '${EMPTY}'
+        Set To Dictionary    ${body}    edge_path=${edge_path}
+    END
+    IF    '${mtu}' != '${EMPTY}'
+        ${mtu_int}=    Convert To Integer    ${mtu}
+        Set To Dictionary    ${body}    mtu=${mtu_int}
+    END
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}/interfaces/${if_id}    ${body}
+    Log    Created external interface ${if_id} (${ip_address}/${prefix_len}) on T0 ${t0_id}
+
+Get T0 Interfaces
+    [Documentation]    List the interfaces of a T0 (or T0-VRF) locale service.
+    [Arguments]    ${t0_id}    ${ls_id}=default
+    ${body}=    NSX REST GET    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}/interfaces
+    RETURN    ${body}
+
+Delete T0 Interface
+    [Documentation]    Delete an interface from a T0 (or T0-VRF) locale service.
+    [Arguments]    ${t0_id}    ${ls_id}    ${if_id}
+    Safe Delete Policy Object    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}/interfaces/${if_id}
+
+# ──────────────────────────────────────────────
+# T0 Static Routing + BFD
+# ──────────────────────────────────────────────
+
+Create Static Route On T0
+    [Documentation]    Add a static route to a T0 or T0-VRF gateway.
+    [Arguments]    ${t0_id}    ${route_id}    ${network}    ${next_hop}
+    ${hop}=    Create Dictionary    ip_address=${next_hop}
+    ${next_hops}=    Create List    ${hop}
+    ${body}=    Create Dictionary
+    ...    display_name=${route_id}
+    ...    network=${network}
+    ...    next_hops=${next_hops}
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${t0_id}/static-routes/${route_id}    ${body}
+    Log    Created static route ${route_id} on T0 ${t0_id}
+
+Delete Static Route On T0
+    [Documentation]    Delete a static route from a T0 or T0-VRF gateway.
+    [Arguments]    ${t0_id}    ${route_id}
+    Safe Delete Policy Object    ${INFRA_BASE}/tier-0s/${t0_id}/static-routes/${route_id}
+
+Get Static Routes On T0
+    [Documentation]    List all static routes on a T0 or T0-VRF gateway.
+    [Arguments]    ${t0_id}
+    ${body}=    NSX REST GET    ${INFRA_BASE}/tier-0s/${t0_id}/static-routes
+    RETURN    ${body}
+
+Create BFD Profile
+    [Documentation]    Create a reusable BFD profile (/infra/bfd-profiles). ${interval} is
+    ...    the transmit/receive interval in milliseconds; ${multiple} the declare-dead
+    ...    multiplier.
+    [Arguments]    ${id}    ${interval}=500    ${multiple}=3
+    ${interval_int}=    Convert To Integer    ${interval}
+    ${multiple_int}=    Convert To Integer    ${multiple}
+    ${body}=    Create Dictionary
+    ...    display_name=${id}
+    ...    interval=${interval_int}
+    ...    multiple=${multiple_int}
+    NSX REST PATCH    ${INFRA_BASE}/bfd-profiles/${id}    ${body}
+    Log    Created BFD profile ${id} (interval ${interval}ms x${multiple})
+
+Delete BFD Profile
+    [Documentation]    Delete a BFD profile.
+    [Arguments]    ${id}
+    Safe Delete Policy Object    ${INFRA_BASE}/bfd-profiles/${id}
+
+Create Static Route BFD Peer On T0
+    [Documentation]    Create a BFD peer for static routes on a T0 or T0-VRF gateway: the
+    ...    static routes via ${peer_ip} are withdrawn when the BFD session goes down.
+    [Arguments]    ${t0_id}    ${peer_id}    ${peer_ip}    ${bfd_profile_path}=${EMPTY}
+    ${body}=    Create Dictionary
+    ...    display_name=${peer_id}
+    ...    peer_address=${peer_ip}
+    ...    enabled=${True}
+    IF    '${bfd_profile_path}' != '${EMPTY}'
+        Set To Dictionary    ${body}    bfd_profile_path=${bfd_profile_path}
+    END
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${t0_id}/static-routes/bfd-peers/${peer_id}    ${body}
+    Log    Created static-route BFD peer ${peer_id} (${peer_ip}) on T0 ${t0_id}
+
+Delete Static Route BFD Peer On T0
+    [Documentation]    Delete a static-route BFD peer from a T0 or T0-VRF gateway.
+    [Arguments]    ${t0_id}    ${peer_id}
+    Safe Delete Policy Object    ${INFRA_BASE}/tier-0s/${t0_id}/static-routes/bfd-peers/${peer_id}
+
+# ──────────────────────────────────────────────
 # BGP
 # ──────────────────────────────────────────────
+
+Enable BGP On T0 Locale Service
+    [Documentation]    Enable BGP on a T0/T0-VRF locale service without setting an ASN.
+    ...    Use this for VRF gateways, which inherit the local ASN from the parent T0
+    ...    (setting local_as_num on a VRF is rejected); use Configure BGP On T0 for a
+    ...    parent/standalone T0 where the ASN must be set.
+    [Arguments]    ${t0_id}    ${locale_service_id}=default
+    ${body}=    Create Dictionary    enabled=${True}
+    NSX REST PATCH
+    ...    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${locale_service_id}/bgp
+    ...    ${body}
+    Log    Enabled BGP on T0 ${t0_id} (ASN inherited)
 
 Configure BGP On T0
     [Documentation]    Enable BGP and set local ASN on a T0 gateway locale service.
@@ -473,8 +662,85 @@ Delete Security Policy
     Safe Delete Policy Object    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}
 
 # ──────────────────────────────────────────────
+# EVPN (NSX 3.1+ / 4.x)
+# ──────────────────────────────────────────────
+# Field names follow the NSX 4.x EvpnConfig/VniPoolConfig schemas. EVPN endpoints
+# are the most version-sensitive part of the Policy API — verify against your
+# release's API reference before the first live run.
+
+Create VNI Pool
+    [Documentation]    Create a VNI pool (/infra/vni-pools) for EVPN VXLAN encapsulation.
+    ...    VRF evpn_transit_vni values must fall inside [${start}, ${end}].
+    [Arguments]    ${id}    ${start}    ${end}
+    ${start_int}=    Convert To Integer    ${start}
+    ${end_int}=    Convert To Integer    ${end}
+    ${body}=    Create Dictionary
+    ...    display_name=${id}
+    ...    start=${start_int}
+    ...    end=${end_int}
+    NSX REST PATCH    ${INFRA_BASE}/vni-pools/${id}    ${body}
+    Log    Created VNI pool ${id} (${start}-${end})
+
+Delete VNI Pool
+    [Documentation]    Delete a VNI pool.
+    [Arguments]    ${id}
+    Safe Delete Policy Object    ${INFRA_BASE}/vni-pools/${id}
+
+Configure EVPN On T0
+    [Documentation]    Enable EVPN on a parent T0 gateway. ${mode} is INLINE or
+    ...    ROUTE_SERVER; ${vni_pool_path} selects the VXLAN VNI pool used for the
+    ...    per-VRF transit VNIs (required for INLINE mode).
+    [Arguments]    ${t0_id}    ${mode}=INLINE    ${vni_pool_path}=${EMPTY}
+    ${body}=    Create Dictionary    mode=${mode}
+    IF    '${vni_pool_path}' != '${EMPTY}'
+        ${encap}=    Create Dictionary    encapsulation_type=VXLAN    vni_pool_path=${vni_pool_path}
+        Set To Dictionary    ${body}    encapsulation_method=${encap}
+    END
+    NSX REST PATCH    ${INFRA_BASE}/tier-0s/${t0_id}/evpn    ${body}
+    Log    Configured EVPN ${mode} on T0 ${t0_id}
+
+Get EVPN Config On T0
+    [Documentation]    Retrieve the EVPN configuration of a T0 gateway.
+    [Arguments]    ${t0_id}
+    ${body}=    NSX REST GET    ${INFRA_BASE}/tier-0s/${t0_id}/evpn
+    RETURN    ${body}
+
+Create EVPN Tunnel Endpoint On T0
+    [Documentation]    Create an EVPN (VXLAN) tunnel endpoint on a T0 locale service,
+    ...    pinned to an edge node. ${local_address} is the VTEP loopback IP advertised
+    ...    to the DC gateways.
+    [Arguments]    ${t0_id}    ${ls_id}    ${te_id}    ${edge_path}    ${local_address}    ${mtu}=${EMPTY}
+    ${addresses}=    Create List    ${local_address}
+    ${body}=    Create Dictionary
+    ...    display_name=${te_id}
+    ...    edge_path=${edge_path}
+    ...    local_addresses=${addresses}
+    IF    '${mtu}' != '${EMPTY}'
+        ${mtu_int}=    Convert To Integer    ${mtu}
+        Set To Dictionary    ${body}    mtu=${mtu_int}
+    END
+    NSX REST PATCH
+    ...    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}/evpn-tunnel-endpoints/${te_id}
+    ...    ${body}
+    Log    Created EVPN tunnel endpoint ${te_id} (${local_address}) on T0 ${t0_id}
+
+Delete EVPN Tunnel Endpoint On T0
+    [Documentation]    Delete an EVPN tunnel endpoint from a T0 locale service.
+    [Arguments]    ${t0_id}    ${ls_id}    ${te_id}
+    Safe Delete Policy Object
+    ...    ${INFRA_BASE}/tier-0s/${t0_id}/locale-services/${ls_id}/evpn-tunnel-endpoints/${te_id}
+
+# ──────────────────────────────────────────────
 # Infra / Manager API
 # ──────────────────────────────────────────────
+
+Get Edge Nodes In Cluster
+    [Documentation]    List the edge nodes of a Policy edge cluster. Each result carries
+    ...    a ``path`` usable as ${edge_path} for external interfaces and EVPN endpoints.
+    [Arguments]    ${edge_cluster_id}
+    ${body}=    NSX REST GET
+    ...    ${POLICY_BASE}/infra/sites/default/enforcement-points/default/edge-clusters/${edge_cluster_id}/edge-nodes
+    RETURN    ${body}
 
 Get Manager Cluster Status
     [Documentation]    Retrieve NSX Manager cluster status via the management API.

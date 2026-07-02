@@ -182,6 +182,19 @@ class NsxtApi:
         )
 
     @keyword
+    def vrf_should_be_linked_to_parent(self, body: Any, parent_t0_path: str) -> None:
+        """Assert a Tier-0 body is a VRF gateway linked to ``parent_t0_path``.
+
+        Fails if the body has no ``vrf_config`` (i.e. it is not a VRF gateway)
+        or if it is linked to a different parent Tier-0.
+        """
+        path = _walk(body, "vrf_config.tier0_path")
+        if path != parent_t0_path:
+            raise AssertionError(
+                f"VRF is linked to '{path}', expected parent '{parent_t0_path}'"
+            )
+
+    @keyword
     def nat_rule_should_exist(
         self,
         rules_body: Any,

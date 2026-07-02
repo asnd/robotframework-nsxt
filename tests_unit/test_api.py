@@ -134,6 +134,25 @@ def test_nat_rule_dnat_action(api):
     assert rule["action"] == "DNAT"
 
 
+# ── VRF ──────────────────────────────────────────────────────────────────────
+
+
+def test_vrf_linked_to_parent(api):
+    body = {"id": "vrf-red", "vrf_config": {"tier0_path": "/infra/tier-0s/t0-gw"}}
+    api.vrf_should_be_linked_to_parent(body, "/infra/tier-0s/t0-gw")
+
+
+def test_vrf_wrong_parent_raises(api):
+    body = {"id": "vrf-red", "vrf_config": {"tier0_path": "/infra/tier-0s/other-t0"}}
+    with pytest.raises(AssertionError, match="expected parent"):
+        api.vrf_should_be_linked_to_parent(body, "/infra/tier-0s/t0-gw")
+
+
+def test_vrf_not_a_vrf_raises(api):
+    with pytest.raises(AssertionError, match="Key 'vrf_config' not found"):
+        api.vrf_should_be_linked_to_parent({"id": "plain-t0"}, "/infra/tier-0s/t0-gw")
+
+
 # ── DFW / groups ─────────────────────────────────────────────────────────────
 
 
