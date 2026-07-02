@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robotframework-nsxt"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Robot Framework library for testing VMware NSX-T: Policy/Management API keywords and structured data-plane probing"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,6 +39,9 @@ dev = [
     "robotframework-robocop>=8.0.0",
     "PyYAML>=6.0",
 ]
+
+[tool.hatch.version]
+path = "src/nsxt_robot/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nsxt_robot"]
