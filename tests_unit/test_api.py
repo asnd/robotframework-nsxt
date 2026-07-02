@@ -83,6 +83,24 @@ def test_bgp_not_established_raises(api):
         api.bgp_neighbor_should_be_established({"connection_state": "CONNECT"})
 
 
+def test_bgp_neighbor_down(api):
+    api.bgp_neighbor_should_be_down({"connection_state": "IDLE"})
+
+
+def test_bgp_neighbor_down_but_established_raises(api):
+    with pytest.raises(AssertionError, match="expected it to be down"):
+        api.bgp_neighbor_should_be_down({"connection_state": "ESTABLISHED"})
+
+
+def test_transport_node_in_maintenance(api):
+    api.transport_node_should_be_in_maintenance({"maintenance_mode": "ENABLED"})
+
+
+def test_transport_node_not_in_maintenance_raises(api):
+    with pytest.raises(AssertionError, match="expected 'ENABLED'"):
+        api.transport_node_should_be_in_maintenance({"maintenance_mode": "DISABLED"})
+
+
 def test_bfd_healthy(api):
     api.bfd_should_be_healthy({"bfd_diagnostic_code": 0})
 

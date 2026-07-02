@@ -52,6 +52,20 @@ NSX REST PATCH
     ${resp_body}=    Output    response body
     RETURN    ${resp_body}
 
+NSX REST POST
+    [Documentation]    Perform a POST request (e.g. an action endpoint) and return the
+    ...                parsed response body. Accepts 200 or 202 (action accepted/async).
+    [Arguments]    ${path}    ${body}=${EMPTY}
+    IF    '${body}' != '${EMPTY}'
+        POST    ${path}    ${body}
+    ELSE
+        POST    ${path}
+    END
+    ${status}=    Output    response status
+    Should Be True    ${status} in [200, 202]    msg=POST ${path} returned unexpected status: ${status}
+    ${resp_body}=    Output    response body
+    RETURN    ${resp_body}
+
 NSX REST DELETE
     [Documentation]    Perform a DELETE request. Accepts 200 or 204 responses.
     [Arguments]    ${path}

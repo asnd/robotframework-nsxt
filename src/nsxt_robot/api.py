@@ -127,6 +127,25 @@ class NsxtApi:
             )
 
     @keyword
+    def bgp_neighbor_should_be_down(self, status: Any) -> None:
+        """Assert a BGP neighbor status body does NOT report ``ESTABLISHED``.
+
+        For asserting a fault injection (e.g. BGP disabled) actually took effect.
+        """
+        state = _walk(status, "connection_state")
+        if state == "ESTABLISHED":
+            raise AssertionError("BGP connection_state is 'ESTABLISHED', expected it to be down")
+
+    @keyword
+    def transport_node_should_be_in_maintenance(self, node_body: Any) -> None:
+        """Assert a transport node body reports maintenance mode ``ENABLED``."""
+        state = _walk(node_body, "maintenance_mode")
+        if state != "ENABLED":
+            raise AssertionError(
+                f"Transport node maintenance_mode is '{state}', expected 'ENABLED'"
+            )
+
+    @keyword
     def bfd_should_be_healthy(self, status: Any) -> None:
         """Assert BFD diagnostic code is 0 (No Diagnostic = healthy)."""
         code = int(_walk(status, "bfd_diagnostic_code"))
