@@ -7,7 +7,7 @@ VMs using [`bbprobe`](https://github.com/asnd/bbprobe) — a single-shot, agentl
 probe that emits parseable JSON over SSH.
 
 - **Distribution:** `robotframework-nsxt` · **import name:** `nsxt_robot`
-- Ships a Python keyword library (`nsxt_robot.NsxtApi`) and five `.robot` resource files
+- Ships a Python keyword library (`nsxt_robot.NsxtApi`) and six `.robot` resource files
   under `nsxt_robot/resources/`, importable from any suite once installed.
 
 ## Layout
@@ -24,7 +24,8 @@ nsxt-robot/
 │       ├── policy_api.robot     # NSX Policy/Mgmt API operations (T1/segment/BGP/NAT/LB/DFW/…)
 │       ├── ssh_keywords.robot   # pooled SSH connection management (reused per host)
 │       ├── traffic_keywords.robot  # SSH traffic keywords (reachability delegates to bbprobe)
-│       └── bbprobe_keywords.robot  # deploy + run bbprobe; structured probe assertions
+│       ├── bbprobe_keywords.robot  # deploy + run bbprobe; structured probe assertions
+│       └── failure_keywords.robot  # fault injection: segment/BGP/edge-node + convergence asserts
 ├── tests_unit/                  # pytest unit tests for NsxtApi (pure Python)
 ├── scripts/gen_docs.sh          # generate libdoc keyword docs into docs/
 └── tests/                       # Robot acceptance suites (consume the library)
@@ -33,14 +34,16 @@ nsxt-robot/
     ├── 04_bgp_bfd/  05_ha_vip/  06_snat/  (SNAT + DNAT)  07_alb_l4/
     ├── 08_dfw/                  # distributed firewall micro-segmentation (groups, tags, allow/deny)
     ├── 09_alb_l7/               # L7 HTTP load balancer + active health monitor
-    └── 10_t0_vrf/               # T0-VRF gateway: uplink interface, static routing, BFD, BGP, EVPN
+    ├── 10_t0_vrf/               # T0-VRF gateway: uplink interface, static routing, BFD, BGP, EVPN
+    └── 11_failover/             # fault injection: segment/BGP/edge-node failures + recovery SLA
 ```
 
 Service coverage: infra health, T1 connectivity, static routing, BGP/BFD, HA VIP,
 NAT (SNAT + DNAT), L4 + L7 load balancing with health monitors, distributed
-firewall micro-segmentation (IP + dynamic tag groups, allow/deny enforcement), and
+firewall micro-segmentation (IP + dynamic tag groups, allow/deny enforcement),
 Tier-0 VRF gateways (VRF-lite and EVPN: external interfaces, VRF static routing with
-BFD-protected next hops, VRF BGP, RD/RT/transit-VNI). Data-plane assertions include
+BFD-protected next hops, VRF BGP, RD/RT/transit-VNI), and fault injection with
+recovery-SLA assertions (segment/BGP/edge-node failures). Data-plane assertions include
 reachability, latency SLA, deny-path verification, and overlay MTU.
 
 ## Install
@@ -180,6 +183,30 @@ The `tests/10_t0_vrf` suite runs the full lifecycle; its `evpn`-tagged tests mut
 fabrics without EVPN. EVPN field names follow the NSX 4.x schemas and are the most
 version-sensitive part of the Policy API; verify against your release's API reference
 on the first live run.
+
+## Failure simulation (`failure_keywords.robot` + `tests/11_failover`)
+
+Resilience testing needs to *inject* failures, not just verify positive-path config. Every
+injection keyword has a paired restore keyword, and convergence is measured from the data
+plane with the existing bbprobe keywords via `Data Plane Should Recover Within` /
+`Data Plane Should Be Down Within`.
+
+| Failure | Keyword(s) | Restore |
+|---|---|---|
+| Segment (or T0/T0-VRF uplink — its backing VLAN segment) | `Fail Segment` | `Restore Segment` |
+| BGP session (T0 or T0-VRF) | `Disable BGP On T0 Locale Service` | `Enable BGP On T0 Locale Service` (policy_api.robot) |
+| BGP neighbor | `Delete BGP Neighbor On T0` (policy_api.robot) | `Create BGP Neighbor On T0` |
+| Edge node drain/failover | `Enter Edge Maintenance Mode` | `Exit Edge Maintenance Mode` |
+| Edge node hard failure (**destructive**) | `Restart Edge Dataplane`, `Reboot Edge Node` | recovers on its own; assert with `Data Plane Should Recover Within` |
+
+`Restart Edge Dataplane` and `Reboot Edge Node` SSH into the edge CLI and cause a real
+outage — they run only when `${EDGE_PASSWORD}` is set (empty by default, unlike
+`NSX_PASSWORD`/`VM_PASSWORD`, so they're opt-in) and are tagged `destructive` for
+wholesale exclusion with `-e destructive`. The edge maintenance-mode failover test is
+tagged `ha` and needs ≥2 edges in `${EDGE_CLUSTER_ID}` (exclude with `-e ha` on a
+single-edge lab). There is no API-level "power off a T0/T0-VRF" — its failure is
+represented by its uplink path (segment admin-down) and by the edge node carrying it,
+which is also what fails in production.
 
 ## Keyword docs
 
