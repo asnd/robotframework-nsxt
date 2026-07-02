@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Robot Framework library for testing VMware NSX-T: Policy/Management API keywords and structured data-plane probing"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 keywords = ["robotframework", "nsx-t", "nsxt", "vmware", "network-testing", "sdn"]
 classifiers = [
     "Development Status :: 3 - Alpha",
