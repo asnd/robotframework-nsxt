@@ -15,6 +15,8 @@ from typing import Any
 
 from robot.api.deco import keyword, library
 
+from . import __version__
+
 
 def _unwrap(data: Any) -> Any:
     """Return the ``results`` list when handed a list-style API body."""
@@ -56,7 +58,7 @@ def _walk(data: Any, path: str) -> Any:
 class NsxtApi:
     """Extraction and typed-assertion keywords for NSX-T API responses."""
 
-    ROBOT_LIBRARY_VERSION = "1.0.0"
+    ROBOT_LIBRARY_VERSION = __version__
 
     # ── extraction ───────────────────────────────────────────────────────────
 

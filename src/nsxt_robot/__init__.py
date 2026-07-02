@@ -16,7 +16,8 @@ Typical usage from a consuming suite::
 
 from __future__ import annotations
 
-from .api import NsxtApi
-
 __version__ = "0.1.0"
+
+from .api import NsxtApi  # noqa: E402 — must follow __version__ (api.py imports it)
+
 __all__ = ["NsxtApi", "__version__"]

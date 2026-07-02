@@ -49,7 +49,7 @@ reachability, latency SLA, deny-path verification, and overlay MTU.
 ## Install
 
 ```sh
-uv venv && uv pip install -e ".[dev]"      # this repo (editable, with dev tools)
+uv sync --locked --extra dev                # this repo (editable, with dev tools, from the committed lockfile)
 # or, as a dependency of your own test project:
 uv pip install robotframework-nsxt          # (once published) or: uv pip install <path-or-git-url>
 ```
