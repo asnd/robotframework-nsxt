@@ -1,9 +1,9 @@
 *** Settings ***
 Documentation    Static routing on a T1 gateway: create route, verify in routing table,
 ...              verify reachability via the static route.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
-Resource         ../../resources/traffic_keywords.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
+Resource         nsxt_robot/resources/traffic_keywords.robot
 Suite Setup      Static Routing Suite Setup
 Suite Teardown   Static Routing Suite Teardown
 Test Tags        routing    static-route
@@ -14,8 +14,7 @@ ${T1A_ID}               test-t1-static
 ${SEG_A_ID}             test-seg-static
 ${ROUTE_ID}             test-static-route-1
 ${T1A_PATH}             /infra/tier-1s/${T1A_ID}
-${T0_PATH}              /infra/tier-0s/${T0_GATEWAY_ID}
-${OVERLAY_TZ_PATH}      /infra/sites/default/enforcement-points/default/transport-zones/${OVERLAY_TZ_ID}
+# ${T0_PATH} and ${OVERLAY_TZ_PATH} come from resources/common.robot
 ${STATIC_ROUTE_NETWORK}    192.168.100.0/24
 ${STATIC_ROUTE_NEXTHOP}    172.16.1.1
 
@@ -62,15 +61,12 @@ Verify Static Route Is Realized
     Wait For Realization    /infra/tier-1s/${T1A_ID}/static-routes/${ROUTE_ID}
 
 Verify Static Route Next Hop Is Correct
-    [Documentation]    Assert the configured next hop IP matches the expected value.
+    [Documentation]    Assert the configured next hop IP matches the expected value
+    ...                (Find In List + Get Value replace the manual dict walking).
     [Tags]    routing    static-route    config
     ${routes}=    Get Static Routes On T1    ${T1A_ID}
-    ${route_list}=    Get From Dictionary    ${routes}    results
-    ${test_route}=    Evaluate
-    ...    next(r for r in ${route_list} if r.get('network') == '${STATIC_ROUTE_NETWORK}')
-    ${next_hops}=    Get From Dictionary    ${test_route}    next_hops
-    ${first_hop}=    Get From List    ${next_hops}    0
-    ${hop_ip}=    Get From Dictionary    ${first_hop}    ip_address
+    ${test_route}=    Find In List    ${routes}    network    ${STATIC_ROUTE_NETWORK}
+    ${hop_ip}=    Get Value    ${test_route}    next_hops.0.ip_address
     Should Be Equal As Strings    ${hop_ip}    ${STATIC_ROUTE_NEXTHOP}
     Log    Static route next-hop verified: ${hop_ip}
 

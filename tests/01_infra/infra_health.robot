@@ -1,10 +1,16 @@
 *** Settings ***
 Documentation    Infrastructure health checks: Manager cluster, Transport Zones, TEP, Compute Manager.
 ...              Uses the NSX Management API (/api/v1/...) in addition to the Policy API.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
 Suite Setup      Initialize REST Session
 Test Tags        infra
+
+
+*** Variables ***
+# When ${INFRA_WARN_ONLY}=${True}, a non-success transport node logs a WARN instead of
+# failing the test. Defaults to strict (fail) so a broken TEP cannot pass silently.
+${INFRA_WARN_ONLY}    ${False}
 
 
 *** Test Cases ***
@@ -12,10 +18,8 @@ Verify Manager Cluster Is Stable
     [Documentation]    GET /api/v1/cluster/status and assert overall status is STABLE.
     [Tags]    infra    cluster
     ${status}=    Get Manager Cluster Status
-    ${overall}=    Get From Dictionary    ${status}    mgmt_cluster_status
-    ${control}=    Get From Dictionary    ${overall}    status
-    Should Be Equal As Strings    ${control}    STABLE
-    Log    Manager cluster status: ${control}
+    Manager Cluster Should Be Stable    ${status}
+    Log    Manager cluster status: ${status['mgmt_cluster_status']['status']}
 
 Verify All Manager Nodes Are Online
     [Documentation]    Check that every manager node in the cluster reports CONNECTED.
@@ -40,16 +44,24 @@ Verify Transport Zones Exist
 
 Verify Host Transport Nodes Are Up
     [Documentation]    Check that all host transport nodes report a SUCCESS configuration state.
+    ...                Fails on any non-success node unless ${INFRA_WARN_ONLY}=${True}.
     [Tags]    infra    transport-nodes
     ${result}=    Get All Transport Node Statuses
     ${node_statuses}=    Get From Dictionary    ${result}    results
     Should Not Be Empty    ${node_statuses}    msg=No transport node statuses returned
+    ${bad_nodes}=    Create List
     FOR    ${tn}    IN    @{node_statuses}
         ${cfg_state}=    Get From Dictionary    ${tn}    node_deployment_state
         ${state}=    Get From Dictionary    ${cfg_state}    state
-        Run Keyword If    '${state}' != 'success'
-        ...    Log    WARNING: Transport node has state '${state}': ${tn['node_id']}    WARN
+        IF    '${state}' != 'success'
+            IF    ${INFRA_WARN_ONLY}
+                Log    WARNING: Transport node has state '${state}': ${tn['node_id']}    WARN
+            ELSE
+                Append To List    ${bad_nodes}    ${tn['node_id']} (${state})
+            END
+        END
     END
+    Should Be Empty    ${bad_nodes}    msg=Transport node(s) not in 'success' state: ${bad_nodes}
     Log    Transport node status check complete
 
 Verify TEP IPs Are Configured
@@ -74,7 +86,6 @@ Verify Compute Manager Connection
     FOR    ${cm}    IN    @{cm_list}
         ${cm_id}=    Get From Dictionary    ${cm}    id
         ${cm_status}=    Get Compute Manager Status    ${cm_id}
-        ${reg_status}=    Get From Dictionary    ${cm_status}    registration_status
-        Should Be Equal As Strings    ${reg_status}    REGISTERED
-        Log    Compute manager ${cm_id} status: ${reg_status}
+        Compute Manager Should Be Registered    ${cm_status}
+        Log    Compute manager ${cm_id}: REGISTERED
     END

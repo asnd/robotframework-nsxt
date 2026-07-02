@@ -1,8 +1,8 @@
 *** Settings ***
 Documentation    BGP and BFD on the T0 gateway: configure BGP, add a neighbor with BFD,
 ...              verify session establishment and learned routes.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
 Suite Setup      BGP BFD Suite Setup
 Suite Teardown   BGP BFD Suite Teardown
 Test Tags        bgp    bfd    routing
@@ -24,15 +24,12 @@ BGP BFD Suite Teardown
 Verify BGP Session State
     [Documentation]    Poll BGP neighbor status and assert it is ESTABLISHED.
     ${status}=    Get BGP Neighbor Status    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}    ${NEIGHBOR_ID}
-    ${bgp_state}=    Get From Dictionary    ${status}    connection_state
-    Should Be Equal As Strings    ${bgp_state}    ESTABLISHED
+    BGP Neighbor Should Be Established    ${status}
 
 Verify BFD Session State
-    [Documentation]    Poll BFD status embedded in BGP neighbor status.
+    [Documentation]    Poll BFD status embedded in BGP neighbor status (diagnostic code 0 = healthy).
     ${status}=    Get BGP Neighbor Status    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}    ${NEIGHBOR_ID}
-    ${bfd_state}=    Get From Dictionary    ${status}    bfd_diagnostic_code
-    # BFD diagnostic code 0 means "No Diagnostic" which indicates a healthy BFD session
-    Should Be Equal As Integers    ${bfd_state}    0
+    BFD Should Be Healthy    ${status}
 
 
 *** Test Cases ***
@@ -67,7 +64,7 @@ Verify BFD Session Is Up
 Verify BGP Routes Received From Peer
     [Documentation]    Assert at least one BGP route has been learned from the peer.
     [Tags]    bgp    routes
-    ${routes}=    Get BGP Routes On T0    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}
+    ${routes}=    Get BGP Routes On T0    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}    ${NEIGHBOR_ID}
     ${route_entries}=    Get From Dictionary    ${routes}    results
     Should Not Be Empty    ${route_entries}    msg=No BGP routes learned from peer ${BGP_PEER_IP}
     Log    BGP routes received: ${route_entries.__len__()} prefix(es)
