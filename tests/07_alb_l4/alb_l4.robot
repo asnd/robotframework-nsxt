@@ -2,9 +2,9 @@
 Documentation    NSX Load Balancer (L4/TCP) end-to-end: create LB service, pool, and virtual server
 ...              attached to a T1 gateway, verify realization and pool member health, then
 ...              validate L4 traffic through the VIP.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
-Resource         ../../resources/traffic_keywords.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
+Resource         nsxt_robot/resources/traffic_keywords.robot
 Suite Setup      ALB L4 Suite Setup
 Suite Teardown   ALB L4 Suite Teardown
 Test Tags        alb    load-balancer    l4
@@ -16,11 +16,12 @@ ${SEG_A_ID}         test-seg-alb
 ${LB_SERVICE_ID}    test-lb-service
 ${LB_POOL_ID}       test-lb-pool
 ${LB_VS_ID}         test-lb-vs
+${LB_MONITOR_ID}    test-lb-monitor
 ${T1A_PATH}         /infra/tier-1s/${T1A_ID}
-${T0_PATH}          /infra/tier-0s/${T0_GATEWAY_ID}
-${OVERLAY_TZ_PATH}  /infra/sites/default/enforcement-points/default/transport-zones/${OVERLAY_TZ_ID}
+# ${T0_PATH} and ${OVERLAY_TZ_PATH} come from resources/common.robot
 ${LB_SERVICE_PATH}  /infra/lb-services/${LB_SERVICE_ID}
 ${LB_POOL_PATH}     /infra/lb-pools/${LB_POOL_ID}
+${LB_MONITOR_PATH}  /infra/lb-monitor-profiles/${LB_MONITOR_ID}
 
 
 *** Keywords ***
@@ -30,11 +31,13 @@ ALB L4 Suite Setup
     Create Overlay Segment    ${SEG_A_ID}    ${T1A_PATH}    ${OVERLAY_TZ_PATH}    ${T1A_SEGMENT_CIDR}
 
 ALB L4 Suite Teardown
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/lb-virtual-servers/${LB_VS_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/lb-pools/${LB_POOL_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/lb-services/${LB_SERVICE_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
+    Standard Suite Teardown
+    ...    ${POLICY_BASE}/infra/lb-virtual-servers/${LB_VS_ID}
+    ...    ${POLICY_BASE}/infra/lb-pools/${LB_POOL_ID}
+    ...    ${POLICY_BASE}/infra/lb-monitor-profiles/${LB_MONITOR_ID}
+    ...    ${POLICY_BASE}/infra/lb-services/${LB_SERVICE_ID}
+    ...    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
+    ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
 
 Verify LB Service Realized
     [Documentation]    Check realization for the LB service.
@@ -49,13 +52,9 @@ Verify LB VS Realized
     Verify Realized    /infra/lb-virtual-servers/${LB_VS_ID}
 
 Verify Pool Member Is UP
-    [Documentation]    Poll pool status until member reports UP state.
+    [Documentation]    Poll pool status until every member reports UP state.
     ${status}=    Get LB Pool Status    ${LB_POOL_ID}    ${LB_SERVICE_ID}
-    ${members}=    Get From Dictionary    ${status}    members
-    Should Not Be Empty    ${members}    msg=No pool members found in status
-    ${first_member}=    Get From List    ${members}    0
-    ${state}=    Get From Dictionary    ${first_member}    status
-    Should Be Equal As Strings    ${state}    UP
+    Pool Member Should Be Up    ${status}
 
 
 *** Test Cases ***
@@ -74,10 +73,17 @@ Create LB Service On T1
     [Tags]    alb    config
     Create LB Service    ${LB_SERVICE_ID}    ${T1A_PATH}    SMALL
 
+Create LB Health Monitor
+    [Documentation]    Create an active HTTP health monitor so pool members are only marked UP
+    ...                when they actually answer HTTP on the monitor port.
+    [Tags]    alb    config    monitor
+    Create LB HTTP Monitor    ${LB_MONITOR_ID}    ${ALB_MONITOR_PORT}    ${ALB_MONITOR_URL}
+
 Create LB Server Pool
-    [Documentation]    Create an LB pool with the test VM as a member on the pool port.
+    [Documentation]    Create an LB pool with the test VM as a member on the pool port,
+    ...                bound to the active HTTP health monitor.
     [Tags]    alb    config
-    Create LB Pool    ${LB_POOL_ID}    ${ALB_POOL_MEMBERS}    ${ALB_POOL_PORT}
+    Create LB Pool    ${LB_POOL_ID}    ${ALB_POOL_MEMBERS}    ${ALB_POOL_PORT}    ${LB_MONITOR_PATH}
 
 Create L4 Virtual Server
     [Documentation]    Create a TCP L4 virtual server on the VIP with the pool and LB service.
@@ -110,7 +116,7 @@ Verify Pool Member Is Healthy
     Wait Until Keyword Succeeds    3 min    15 sec    Verify Pool Member Is UP
 
 Verify L4 Traffic Through VIP
-    [Documentation]    From VM2 (or an external host), send HTTP traffic to the LB VIP and
-    ...                assert an HTTP 200 response, confirming L4 load balancing is working.
+    [Documentation]    From VM2, send HTTP traffic to the LB VIP and assert a successful
+    ...                2xx response via bbprobe, confirming L4 load balancing is working.
     [Tags]    alb    traffic    end-to-end
-    Curl From VM    ${VM2_IP}    http://${ALB_VIP}:${ALB_VIP_PORT}    200
+    Probe Should Succeed    ${VM2_IP}    http_2xx    http://${ALB_VIP}:${ALB_VIP_PORT}

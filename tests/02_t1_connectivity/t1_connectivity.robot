@@ -1,9 +1,9 @@
 *** Settings ***
 Documentation    T1 gateway lifecycle: create T1-A and T1-B, attach segments, verify realization
 ...              and connectivity between VMs on different T1s.
-Resource         ../../resources/common.robot
-Resource         ../../resources/policy_api.robot
-Resource         ../../resources/traffic_keywords.robot
+Resource         nsxt_robot/resources/common.robot
+Resource         nsxt_robot/resources/policy_api.robot
+Resource         nsxt_robot/resources/traffic_keywords.robot
 Suite Setup      T1 Connectivity Suite Setup
 Suite Teardown   T1 Connectivity Suite Teardown
 Test Tags        t1    routing
@@ -16,8 +16,7 @@ ${SEG_A_ID}         test-seg-a
 ${SEG_B_ID}         test-seg-b
 ${T1A_PATH}         /infra/tier-1s/${T1A_ID}
 ${T1B_PATH}         /infra/tier-1s/${T1B_ID}
-${T0_PATH}          /infra/tier-0s/${T0_GATEWAY_ID}
-${OVERLAY_TZ_PATH}  /infra/sites/default/enforcement-points/default/transport-zones/${OVERLAY_TZ_ID}
+# ${T0_PATH} and ${OVERLAY_TZ_PATH} are now defined once in resources/common.robot
 
 
 *** Keywords ***
@@ -29,32 +28,23 @@ T1 Connectivity Suite Setup
     Create Overlay Segment    ${SEG_B_ID}    ${T1B_PATH}    ${OVERLAY_TZ_PATH}    ${T1B_SEGMENT_CIDR}
 
 T1 Connectivity Suite Teardown
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/segments/${SEG_B_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
-    Safe Delete Policy Object    ${POLICY_BASE}/infra/tier-1s/${T1B_ID}
+    Standard Suite Teardown
+    ...    ${POLICY_BASE}/infra/segments/${SEG_A_ID}
+    ...    ${POLICY_BASE}/infra/segments/${SEG_B_ID}
+    ...    ${POLICY_BASE}/infra/tier-1s/${T1A_ID}
+    ...    ${POLICY_BASE}/infra/tier-1s/${T1B_ID}
 
 
 *** Test Cases ***
-Verify T1-A Gateway Is Realized
-    [Documentation]    Poll the realization API until T1-A reports SUCCESS.
+Verify Gateways And Segments Are Realized
+    [Documentation]    Poll the realization API for both T1 gateways and both segments.
+    ...                One data-driven test replaces four near-identical realization cases.
     [Tags]    t1    realization
-    Wait For Realization    /infra/tier-1s/${T1A_ID}
-
-Verify T1-B Gateway Is Realized
-    [Documentation]    Poll the realization API until T1-B reports SUCCESS.
-    [Tags]    t1    realization
-    Wait For Realization    /infra/tier-1s/${T1B_ID}
-
-Verify Segment-A Is Realized
-    [Documentation]    Poll the realization API until Segment-A reports SUCCESS.
-    [Tags]    t1    realization
-    Wait For Realization    /infra/segments/${SEG_A_ID}
-
-Verify Segment-B Is Realized
-    [Documentation]    Poll the realization API until Segment-B reports SUCCESS.
-    [Tags]    t1    realization
-    Wait For Realization    /infra/segments/${SEG_B_ID}
+    [Template]    Wait For Realization
+    /infra/tier-1s/${T1A_ID}
+    /infra/tier-1s/${T1B_ID}
+    /infra/segments/${SEG_A_ID}
+    /infra/segments/${SEG_B_ID}
 
 Verify T1-A Gateway Configuration
     [Documentation]    GET the T1-A gateway and assert it is linked to the T0.
@@ -71,10 +61,23 @@ Verify T1-B Gateway Configuration
     Log    T1-B linked to T0: ${t1['tier0_path']}
 
 Verify Inter-T1 Connectivity
-    [Documentation]    SSH to VM1 (on Seg-A/T1-A) and ping VM2 (on Seg-B/T1-B).
-    ...                Traffic must traverse: VM1 → T1-A → T0 → T1-B → VM2.
+    [Documentation]    Correlate control plane and data plane: wait until both segments are
+    ...                realized, then probe VM1 → VM2 (traffic traverses VM1 → T1-A → T0 → T1-B → VM2).
     [Tags]    t1    traffic
-    Ping From VM    ${VM1_IP}    ${VM2_IP}
+    Service Data Plane Should Be Reachable    ${VM1_IP}    icmp    ${VM2_IP}
+    ...    /infra/segments/${SEG_A_ID}    /infra/segments/${SEG_B_ID}
+
+Verify Inter-T1 Latency Within SLA
+    [Documentation]    Beyond reachability, assert the VM1 → VM2 round-trip stays under the
+    ...                ${PROBE_MAX_LATENCY}s budget, catching a slow/degraded overlay path.
+    [Tags]    t1    traffic    latency
+    Probe Latency Should Be Below    ${VM1_IP}    icmp    ${VM2_IP}    ${PROBE_MAX_LATENCY}
+
+Verify Overlay MTU End To End
+    [Documentation]    Prove the VM1 → VM2 overlay path carries a full 1500-byte inner frame
+    ...                without fragmenting (DF-bit ping), validating the NSX TEP MTU headroom.
+    [Tags]    t1    traffic    mtu
+    Verify Overlay MTU From VM    ${VM1_IP}    ${VM2_IP}    ${OVERLAY_MTU_PAYLOAD}
 
 Verify T1 To External Connectivity
     [Documentation]    SSH to VM1 and ping an IP outside NSX to verify T0 uplink routing.
