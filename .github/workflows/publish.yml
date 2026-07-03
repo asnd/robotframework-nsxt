@@ -16,6 +16,15 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
+      - name: Guard — tag must match the package version
+        run: |
+          version="$(grep -oP '(?<=^__version__ = ")[^"]+' src/nsxt_robot/__init__.py)"
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ "v${version}" != "${tag}" ]; then
+            echo "Tag ${tag} does not match package version v${version}" >&2
+            exit 1
+          fi
+
       - name: Build wheel + sdist
         run: uv build
 

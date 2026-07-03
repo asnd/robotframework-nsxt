@@ -13,12 +13,11 @@ Typical usage from a consuming suite::
     Library     nsxt_robot.NsxtLibrary
     Library     nsxt_robot.NsxtApi
     Resource    nsxt_robot/resources/common.robot
-    Resource    nsxt_robot/resources/policy_api.robot
 """
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 # Both imports must follow __version__: api.py and library.py read it at class
 # definition time (ROBOT_LIBRARY_VERSION), and library.py imports api.py.
