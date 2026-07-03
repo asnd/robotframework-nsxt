@@ -100,8 +100,9 @@ ignore = [
     "MISC09",  # inline IF — block IF is clearer for these guards
     "VAR05",   # suite-scoped variable — intentional in the HA VIP suite
     "DOC01",   # missing docs — only flagged on self-descriptive Setup/Teardown keywords
-    "LEN03",   # keywords-per-keyword — these composite keywords are cohesive
-    "LEN07",   # args-per-keyword — NSX API keywords legitimately need their arguments
-    "LEN28",   # file length — policy_api.robot is a single cohesive API wrapper
-    "VAR02",   # unused var — positional multi-return capture makes middle values unavoidable
+    "VAR02",   # unused var — SSH multi-return (stdout/stderr/rc) leaves some values unused
+    # LEN03/LEN07/LEN28 (too-many-calls/-args/file-length) dropped from this list:
+    # they were needed for the old ~776-line policy_api.robot keyword wrapper, which
+    # is now a ~10-line shim after the Policy/Mgmt API keywords moved to Python
+    # (src/nsxt_robot/keywords/); re-audited and confirmed zero remaining hits.
 ]

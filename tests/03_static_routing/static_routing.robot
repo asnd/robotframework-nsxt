@@ -50,9 +50,7 @@ Verify Static Route Is Present
     [Documentation]    GET static routes on T1 and assert the test route appears in the list.
     [Tags]    routing    static-route
     ${routes}=    Get Static Routes On T1    ${T1A_ID}
-    ${route_list}=    Get From Dictionary    ${routes}    results
-    ${route_networks}=    Evaluate    [r.get('network', '') for r in ${route_list}]
-    Should Contain    ${route_networks}    ${STATIC_ROUTE_NETWORK}
+    Find In List    ${routes}    network    ${STATIC_ROUTE_NETWORK}
     Log    Static route ${STATIC_ROUTE_NETWORK} found on T1 ${T1A_ID}
 
 Verify Static Route Is Realized

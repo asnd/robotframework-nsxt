@@ -22,7 +22,7 @@ HA VIP Suite Teardown
 Verify HA VIP Realized
     [Documentation]    Check that the T0 locale service is in a realized state.
     ${body}=    Get T0 Locale Service    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}
-    ${ls_path}=    Get From Dictionary    ${body}    path
+    ${ls_path}=    Get Value    ${body}    path
     Verify Realized    ${ls_path}
 
 
@@ -31,7 +31,8 @@ Retrieve T0 Locale Service
     [Documentation]    GET the T0 locale service to confirm it exists and retrieve edge paths.
     [Tags]    ha-vip    prereq
     ${body}=    Get T0 Locale Service    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}
-    Log    Locale service: ${body['id']} | Edge cluster: ${body.get('edge_cluster_path', 'N/A')}
+    ${ls_id}=    Get Value    ${body}    id
+    Log    Locale service: ${ls_id} | Edge cluster: ${body.get('edge_cluster_path', 'N/A')}
     Set Suite Variable    ${LOCALE_SERVICE_BODY}    ${body}
 
 Create HA VIP On T0 Locale Service
@@ -40,17 +41,17 @@ Create HA VIP On T0 Locale Service
     # Retrieve the first two interface paths from the locale service for HA VIP binding
     ${body}=    NSX REST GET
     ...    ${POLICY_BASE}/infra/tier-0s/${T0_GATEWAY_ID}/locale-services/${LOCALE_SERVICE_ID}/interfaces
-    ${interfaces}=    Get From Dictionary    ${body}    results
+    ${interfaces}=    Get Value    ${body}    results
     Should Be True    len(${interfaces}) >= 2    msg=Need at least 2 interfaces for HA VIP
-    ${path1}=    Get From Dictionary    ${interfaces[0]}    path
-    ${path2}=    Get From Dictionary    ${interfaces[1]}    path
+    ${path1}=    Get Value    ${interfaces}    0.path
+    ${path2}=    Get Value    ${interfaces}    1.path
     Create HA VIP Config On T0    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}    ${HA_VIP_IP}    ${path1}    ${path2}
 
 Verify HA VIP Configuration
     [Documentation]    GET the locale service and assert ha_vip_configs contains the configured VIP.
     [Tags]    ha-vip    config
     ${body}=    Get T0 Locale Service    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}
-    ${vip_configs}=    Get From Dictionary    ${body}    ha_vip_configs
+    ${vip_configs}=    Get Value    ${body}    ha_vip_configs
     Should Not Be Empty    ${vip_configs}    msg=No HA VIP configs found on locale service
     ${vip_ip}=    Evaluate    '${HA_VIP_IP}'.split('/')[0]
     ${all_vip_ips}=    Evaluate

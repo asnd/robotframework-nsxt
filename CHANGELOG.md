@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `tests/01_infra`, `03_static_routing`, `04_bgp_bfd`, and `05_ha_vip` no
+  longer bypass `NsxtApi`'s extraction keywords: `Get From Dictionary` +
+  manual dict indexing replaced with `Get Value`/`Get Ids`/`Find In List`,
+  including collapsing two-step dotted lookups (e.g.
+  `node_deployment_state` then `state`) into one `Get Value ... a.b` call.
+  Verified against `mock_nsx` after the change (21/21 passing).
+- Robocop's `LEN03`/`LEN07`/`LEN28` (too-many-calls/-arguments/file-length)
+  ignores dropped after re-auditing: they existed for the old ~776-line
+  `policy_api.robot` keyword wrapper, which is now a ~10-line shim; a full
+  `robocop check` with the ignore list cleared confirms zero remaining
+  hits for these three rules (the rest of the ignore list — tag/naming/
+  section-order/VAR conventions — still catches real, intentional patterns
+  and is unchanged).
+
 ### Added
 
 - The remaining ~70 `policy_api.robot` keywords (T1/T0/VRF gateways,
