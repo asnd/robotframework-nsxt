@@ -1,10 +1,10 @@
 """NsxtApi — Robot Framework keyword library for extracting and asserting on
 NSX-T Policy/Management API JSON responses.
 
-Used *alongside* RESTinstance: the ``policy_api.robot`` keywords still make the
-HTTP calls and return parsed bodies; these keywords operate on those bodies to
-replace the verbose ``Get From Dictionary`` chains and ``Evaluate next(...)``
-patterns scattered through the suites.
+Used *alongside* ``NsxtLibrary``: the ``policy_api.robot`` keywords make the
+HTTP calls (via ``NsxtLibrary``'s REST verbs) and return parsed bodies; these
+keywords operate on those bodies to replace the verbose ``Get From Dictionary``
+chains and ``Evaluate next(...)`` patterns scattered through the suites.
 
 Pure Python, no third-party dependencies.
 """

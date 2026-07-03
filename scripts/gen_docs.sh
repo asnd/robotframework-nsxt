@@ -6,8 +6,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p docs
 
+LIBRARIES="NsxtLibrary NsxtApi"
 RESOURCES="common policy_api ssh_keywords traffic_keywords bbprobe_keywords failure_keywords"
-TOTAL=$(( $(echo "$RESOURCES" | wc -w) + 1 ))
+TOTAL=$(( $(echo "$LIBRARIES" | wc -w) + $(echo "$RESOURCES" | wc -w) ))
 i=0
 
 step() {
@@ -17,8 +18,10 @@ step() {
     fi
 }
 
-step "nsxt_robot.NsxtApi"
-uv run python -m robot.libdoc nsxt_robot.NsxtApi docs/NsxtApi.html
+for lib in $LIBRARIES; do
+    step "nsxt_robot.$lib"
+    uv run python -m robot.libdoc "nsxt_robot.$lib" "docs/$lib.html"
+done
 
 for r in $RESOURCES; do
     step "resources/$r.robot"
