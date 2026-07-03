@@ -2,13 +2,15 @@
 
 A reusable **Robot Framework library for testing VMware NSX-T 4.x**, plus an
 acceptance-test suite that uses it. The library drives the **control plane** via the
-NSX Policy/Management REST API (RESTinstance) and validates the **data plane** from test
-VMs using [`bbprobe`](https://github.com/asnd/bbprobe) — a single-shot, agentless network
-probe that emits parseable JSON over SSH.
+NSX Policy/Management REST API (`nsxt_robot.NsxtLibrary`, a `requests`-based client with
+session-token auth, retries, and connection management) and validates the **data plane**
+from test VMs using [`bbprobe`](https://github.com/asnd/bbprobe) — a single-shot,
+agentless network probe that emits parseable JSON over SSH.
 
 - **Distribution:** `robotframework-nsxt` · **import name:** `nsxt_robot`
-- Ships a Python keyword library (`nsxt_robot.NsxtApi`) and six `.robot` resource files
-  under `nsxt_robot/resources/`, importable from any suite once installed.
+- Ships two Python keyword libraries (`nsxt_robot.NsxtLibrary` for connections/REST/
+  realization, `nsxt_robot.NsxtApi` for JSON extraction/assertions) and six `.robot`
+  resource files under `nsxt_robot/resources/`, importable from any suite once installed.
 
 ## Layout
 
@@ -143,9 +145,9 @@ full-size **DF-bit** ICMP packet (`ping -M do -s`) to validate the overlay carri
 
 ## NSX-T API keywords (`nsxt_robot.NsxtApi`)
 
-Used alongside RESTinstance — the `policy_api.robot` getters return bodies; these
-keywords parse and assert on them, replacing `Get From Dictionary` chains and
-`Evaluate next(...)`.
+Used alongside `nsxt_robot.NsxtLibrary` — the `policy_api.robot` getters return bodies
+(fetched via `NsxtLibrary`'s `NSX REST *` keywords); these keywords parse and assert on
+them, replacing `Get From Dictionary` chains and `Evaluate next(...)`.
 
 | Keyword | Purpose |
 |---------|---------|

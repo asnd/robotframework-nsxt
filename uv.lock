@@ -1356,6 +1356,7 @@ wheels = [
 name = "robotframework-nsxt"
 source = { editable = "." }
 dependencies = [
+    { name = "requests" },
     { name = "restinstance" },
     { name = "robotframework" },
     { name = "robotframework-sshlibrary" },
@@ -1375,6 +1376,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31.0" },
     { name = "restinstance", specifier = ">=1.3.0" },
     { name = "robotframework", specifier = ">=6.1" },
     { name = "robotframework-robocop", marker = "extra == 'dev'", specifier = ">=8.0.0" },
