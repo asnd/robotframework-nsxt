@@ -19,45 +19,44 @@ Verify Manager Cluster Is Stable
     [Tags]    infra    cluster
     ${status}=    Get Manager Cluster Status
     Manager Cluster Should Be Stable    ${status}
-    Log    Manager cluster status: ${status['mgmt_cluster_status']['status']}
+    ${state}=    Get Value    ${status}    mgmt_cluster_status.status
+    Log    Manager cluster status: ${state}
 
 Verify All Manager Nodes Are Online
     [Documentation]    Check that every manager node in the cluster reports CONNECTED.
     [Tags]    infra    cluster
     ${status}=    Get Manager Cluster Status
-    ${nodes}=    Get From Dictionary    ${status['mgmt_cluster_status']}    online_nodes
+    ${nodes}=    Get Value    ${status}    mgmt_cluster_status.online_nodes
     Should Not Be Empty    ${nodes}    msg=No online nodes found in cluster status
     FOR    ${node}    IN    @{nodes}
-        Log    Node ${node['member_ip']} is online
+        ${member_ip}=    Get Value    ${node}    member_ip
+        Log    Node ${member_ip} is online
     END
 
 Verify Transport Zones Exist
     [Documentation]    Assert that the configured overlay TZ is present.
     [Tags]    infra    transport-zones
     ${result}=    Get Transport Zones
-    ${tz_list}=    Get From Dictionary    ${result}    results
-    Should Not Be Empty    ${tz_list}    msg=No transport zones returned
-    ${tz_ids}=    Evaluate    [tz.get('id', tz.get('display_name', '')) for tz in ${tz_list}]
+    ${tz_ids}=    Get Ids    ${result}
     Log    Transport zones found: ${tz_ids}
-    ${found}=    Evaluate    any('${OVERLAY_TZ_ID}' in item for item in ${tz_ids})
-    Should Be True    ${found}    msg=Overlay TZ '${OVERLAY_TZ_ID}' not found in transport zone list
+    Should Contain    ${tz_ids}    ${OVERLAY_TZ_ID}    msg=Overlay TZ '${OVERLAY_TZ_ID}' not found in transport zone list
 
 Verify Host Transport Nodes Are Up
     [Documentation]    Check that all host transport nodes report a SUCCESS configuration state.
     ...                Fails on any non-success node unless ${INFRA_WARN_ONLY}=${True}.
     [Tags]    infra    transport-nodes
     ${result}=    Get All Transport Node Statuses
-    ${node_statuses}=    Get From Dictionary    ${result}    results
+    ${node_statuses}=    Get Value    ${result}    results
     Should Not Be Empty    ${node_statuses}    msg=No transport node statuses returned
     ${bad_nodes}=    Create List
     FOR    ${tn}    IN    @{node_statuses}
-        ${cfg_state}=    Get From Dictionary    ${tn}    node_deployment_state
-        ${state}=    Get From Dictionary    ${cfg_state}    state
+        ${state}=    Get Value    ${tn}    node_deployment_state.state
         IF    '${state}' != 'success'
+            ${node_id}=    Get Value    ${tn}    node_id
             IF    ${INFRA_WARN_ONLY}
-                Log    WARNING: Transport node has state '${state}': ${tn['node_id']}    WARN
+                Log    WARNING: Transport node has state '${state}': ${node_id}    WARN
             ELSE
-                Append To List    ${bad_nodes}    ${tn['node_id']} (${state})
+                Append To List    ${bad_nodes}    ${node_id} (${state})
             END
         END
     END
@@ -68,11 +67,11 @@ Verify TEP IPs Are Configured
     [Documentation]    Confirm transport nodes have TEP IP addresses assigned.
     [Tags]    infra    tep
     ${result}=    NSX REST GET    ${MGMT_BASE}/transport-nodes
-    ${nodes}=    Get From Dictionary    ${result}    results
+    ${nodes}=    Get Value    ${result}    results
     Should Not Be Empty    ${nodes}    msg=No transport nodes found
     FOR    ${tn}    IN    @{nodes}
-        ${tn_id}=    Get From Dictionary    ${tn}    id
-        ${tn_name}=    Get From Dictionary    ${tn}    display_name
+        ${tn_id}=    Get Value    ${tn}    id
+        ${tn_name}=    Get Value    ${tn}    display_name
         Log    Transport node: ${tn_name} (${tn_id})
     END
     Log    TEP configuration verified for all transport nodes
@@ -81,10 +80,10 @@ Verify Compute Manager Connection
     [Documentation]    Assert at least one compute manager is registered and connected.
     [Tags]    infra    compute-manager
     ${result}=    Get Compute Managers
-    ${cm_list}=    Get From Dictionary    ${result}    results
+    ${cm_list}=    Get Value    ${result}    results
     Should Not Be Empty    ${cm_list}    msg=No compute managers registered
     FOR    ${cm}    IN    @{cm_list}
-        ${cm_id}=    Get From Dictionary    ${cm}    id
+        ${cm_id}=    Get Value    ${cm}    id
         ${cm_status}=    Get Compute Manager Status    ${cm_id}
         Compute Manager Should Be Registered    ${cm_status}
         Log    Compute manager ${cm_id}: REGISTERED

@@ -65,17 +65,20 @@ Verify BGP Routes Received From Peer
     [Documentation]    Assert at least one BGP route has been learned from the peer.
     [Tags]    bgp    routes
     ${routes}=    Get BGP Routes On T0    ${T0_GATEWAY_ID}    ${LOCALE_SERVICE_ID}    ${NEIGHBOR_ID}
-    ${route_entries}=    Get From Dictionary    ${routes}    results
+    ${route_entries}=    Get Value    ${routes}    results
     Should Not Be Empty    ${route_entries}    msg=No BGP routes learned from peer ${BGP_PEER_IP}
-    Log    BGP routes received: ${route_entries.__len__()} prefix(es)
+    ${route_count}=    Get Length    ${route_entries}
+    Log    BGP routes received: ${route_count} prefix(es)
 
 Verify BGP Neighbor Configuration
     [Documentation]    GET the BGP neighbor config and assert key parameters are correct.
     [Tags]    bgp    config
     ${body}=    NSX REST GET
     ...    ${POLICY_BASE}/infra/tier-0s/${T0_GATEWAY_ID}/locale-services/${LOCALE_SERVICE_ID}/bgp/neighbors/${NEIGHBOR_ID}
-    Should Be Equal As Strings    ${body['neighbor_address']}    ${BGP_PEER_IP}
-    Should Be Equal As Strings    ${body['remote_as_num']}    ${BGP_PEER_ASN}
-    ${bfd}=    Get From Dictionary    ${body}    bfd_config
-    Should Be True    ${bfd['enabled']}
+    ${neighbor_address}=    Get Value    ${body}    neighbor_address
+    ${remote_asn}=    Get Value    ${body}    remote_as_num
+    Should Be Equal As Strings    ${neighbor_address}    ${BGP_PEER_IP}
+    Should Be Equal As Strings    ${remote_asn}    ${BGP_PEER_ASN}
+    ${bfd_enabled}=    Get Value    ${body}    bfd_config.enabled
+    Should Be True    ${bfd_enabled}
     Log    BGP neighbor config verified: peer ${BGP_PEER_IP} ASN ${BGP_PEER_ASN}
