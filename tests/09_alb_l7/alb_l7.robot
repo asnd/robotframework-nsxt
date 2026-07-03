@@ -95,5 +95,5 @@ Verify Pool Member Is Healthy
 Verify L7 HTTP Traffic Through VIP
     [Documentation]    From VM2, send HTTP to the L7 VIP and assert a 2xx response via bbprobe,
     ...                confirming L7 HTTP load balancing works end to end.
-    [Tags]    alb    traffic    end-to-end
+    [Tags]    alb    traffic    end-to-end    dataplane
     Probe Should Succeed    ${VM2_IP}    http_2xx    http://${ALB_L7_VIP}:${ALB_L7_VIP_PORT}
