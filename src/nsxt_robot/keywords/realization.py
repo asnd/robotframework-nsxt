@@ -14,11 +14,10 @@ from typing import Any
 from robot.api.deco import keyword
 from robot.utils import timestr_to_secs
 
-from ..api import NsxtApi
 from ..connections import NsxtConnectionManager
 from ..exceptions import NsxtRealizationError
-
-POLICY_BASE = "/policy/api/v1"
+from .assertions import NsxtApi
+from .paths import POLICY_BASE
 
 _assertions = NsxtApi()
 

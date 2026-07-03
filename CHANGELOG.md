@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- The remaining ~70 `policy_api.robot` keywords (T1/T0/VRF gateways,
+  segments, static routes, BFD, BGP, EVPN, NAT, LB, HA VIP, tags, groups,
+  DFW, plus fabric/infra lookups) are now implemented in Python on
+  `NsxtLibrary` (`keywords/{gateways,routing,services,security,fabric}.py`),
+  under their exact legacy names and argument signatures. `policy_api.robot`
+  is now a shim (keeps `${INFRA_BASE}` for `failure_keywords.robot`); no
+  consuming suite needed any changes.
+- `NsxtApi`'s assertions moved to `keywords/assertions.py`; `api.py` is now a
+  backward-compatible re-export so `from nsxt_robot.api import NsxtApi`
+  keeps working.
+- The `RESTinstance` dependency is dropped entirely — nothing in the library
+  used it after the REST-verb migration in the prior release.
+- 85 new unit tests for the migrated keyword modules (gateways/routing/
+  services/security/fabric), using a lightweight call-recording fake
+  connection rather than the mock server, for fast, precise coverage of
+  each keyword's request shape.
+
 - `NsxtLibrary`: a stateful `requests`-based client (`NsxtSession`) with
   session-token auth (falling back to Basic), automatic re-authentication on
   an expired session, retry with backoff honoring `Retry-After`, and

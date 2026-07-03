@@ -26,11 +26,12 @@ nsxt-robot/
 │   ├── client.py                # NsxtSession: auth, retries, redaction (requests-based)
 │   ├── connections.py           # ConnectionCache wrapper (Open/Switch/Close Nsx Connection)
 │   ├── exceptions.py            # typed exception hierarchy
-│   ├── keywords/                # connection.py, rest.py, realization.py keyword mixins
-│   ├── api.py                   # NsxtApi: JSON extraction + typed status assertions
+│   ├── keywords/                # connection/rest/realization/fabric/gateways/routing/
+│   │                            #   services/security keyword mixins + assertions.py (NsxtApi)
+│   ├── api.py                   # back-compat shim re-exporting NsxtApi from keywords/assertions.py
 │   └── resources/
 │       ├── common.robot         # Initialize REST Session shim, shared vars, teardown
-│       ├── policy_api.robot     # NSX Policy/Mgmt API operations (T1/segment/BGP/NAT/LB/DFW/…)
+│       ├── policy_api.robot     # shim: keywords now live on NsxtLibrary (keywords/*.py)
 │       ├── ssh_keywords.robot   # pooled SSH connection management (reused per host)
 │       ├── traffic_keywords.robot  # SSH traffic keywords (reachability delegates to bbprobe)
 │       ├── bbprobe_keywords.robot  # deploy + run bbprobe; structured probe assertions
@@ -68,9 +69,9 @@ Then import the keywords from any suite:
 
 ```robotframework
 *** Settings ***
+Library     nsxt_robot.NsxtLibrary
 Library     nsxt_robot.NsxtApi
 Resource    nsxt_robot/resources/common.robot
-Resource    nsxt_robot/resources/policy_api.robot
 Resource    nsxt_robot/resources/traffic_keywords.robot
 ```
 
@@ -176,9 +177,9 @@ full-size **DF-bit** ICMP packet (`ping -M do -s`) to validate the overlay carri
 
 ## NSX-T API keywords (`nsxt_robot.NsxtApi`)
 
-Used alongside `nsxt_robot.NsxtLibrary` — the `policy_api.robot` getters return bodies
-(fetched via `NsxtLibrary`'s `NSX REST *` keywords); these keywords parse and assert on
-them, replacing `Get From Dictionary` chains and `Evaluate next(...)`.
+Used alongside `nsxt_robot.NsxtLibrary` — its getter keywords (`Get T1 Gateway`,
+`Get Group Members`, ...) return bodies; these keywords parse and assert on them,
+replacing `Get From Dictionary` chains and `Evaluate next(...)`.
 
 | Keyword | Purpose |
 |---------|---------|
@@ -195,7 +196,7 @@ them, replacing `Get From Dictionary` chains and `Evaluate next(...)`.
 | `DFW Rule Should Have Action  rules  rule_id  action` | Assert a DFW rule exists with ALLOW/DROP/REJECT |
 | `Group Should Have Member  members  ip_or_name` | Assert a group's effective members include a VM by IP or name |
 
-## T0-VRF and EVPN (`policy_api.robot` + `tests/10_t0_vrf`)
+## T0-VRF and EVPN (`nsxt_robot.NsxtLibrary` + `tests/10_t0_vrf`)
 
 A T0-VRF is itself a tier-0 object, so every `... On T0` keyword (BGP, static routes,
 interfaces, locale services) works against a VRF's ID unchanged. On top of that:
@@ -227,8 +228,8 @@ plane with the existing bbprobe keywords via `Data Plane Should Recover Within` 
 | Failure | Keyword(s) | Restore |
 |---|---|---|
 | Segment (or T0/T0-VRF uplink — its backing VLAN segment) | `Fail Segment` | `Restore Segment` |
-| BGP session (T0 or T0-VRF) | `Disable BGP On T0 Locale Service` | `Enable BGP On T0 Locale Service` (policy_api.robot) |
-| BGP neighbor | `Delete BGP Neighbor On T0` (policy_api.robot) | `Create BGP Neighbor On T0` |
+| BGP session (T0 or T0-VRF) | `Disable BGP On T0 Locale Service` | `Enable BGP On T0 Locale Service` (NsxtLibrary) |
+| BGP neighbor | `Delete BGP Neighbor On T0` (NsxtLibrary) | `Create BGP Neighbor On T0` |
 | Edge node drain/failover | `Enter Edge Maintenance Mode` | `Exit Edge Maintenance Mode` |
 | Edge node hard failure (**destructive**) | `Restart Edge Dataplane`, `Reboot Edge Node` | recovers on its own; assert with `Data Plane Should Recover Within` |
 
