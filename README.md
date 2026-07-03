@@ -18,17 +18,25 @@ agentless network probe that emits parseable JSON over SSH.
 nsxt-robot/
 ├── pyproject.toml               # packaging (hatchling), deps, ruff/mypy/robocop config
 ├── env.example.yaml             # copy to env.yaml and edit (env.yaml is gitignored)
+├── env.mock.yaml                # variables for running against mock_nsx/ instead of a lab
+├── Containerfile.mock           # Podman image for mock_nsx/
 ├── src/nsxt_robot/
-│   ├── __init__.py              # exports NsxtApi, __version__
+│   ├── __init__.py              # exports NsxtLibrary, NsxtApi, __version__
+│   ├── library.py               # NsxtLibrary: connection cache + REST verbs + realization
+│   ├── client.py                # NsxtSession: auth, retries, redaction (requests-based)
+│   ├── connections.py           # ConnectionCache wrapper (Open/Switch/Close Nsx Connection)
+│   ├── exceptions.py            # typed exception hierarchy
+│   ├── keywords/                # connection.py, rest.py, realization.py keyword mixins
 │   ├── api.py                   # NsxtApi: JSON extraction + typed status assertions
 │   └── resources/
-│       ├── common.robot         # REST session, realization polling, shared vars, teardown
+│       ├── common.robot         # Initialize REST Session shim, shared vars, teardown
 │       ├── policy_api.robot     # NSX Policy/Mgmt API operations (T1/segment/BGP/NAT/LB/DFW/…)
 │       ├── ssh_keywords.robot   # pooled SSH connection management (reused per host)
 │       ├── traffic_keywords.robot  # SSH traffic keywords (reachability delegates to bbprobe)
 │       ├── bbprobe_keywords.robot  # deploy + run bbprobe; structured probe assertions
 │       └── failure_keywords.robot  # fault injection: segment/BGP/edge-node + convergence asserts
-├── tests_unit/                  # pytest unit tests for NsxtApi (pure Python)
+├── mock_nsx/                    # FastAPI mock NSX Manager (dev-only, `mock` dependency group)
+├── tests_unit/                  # pytest unit tests for the library and the mock
 ├── scripts/gen_docs.sh          # generate libdoc keyword docs into docs/
 └── tests/                       # Robot acceptance suites (consume the library)
     ├── 00_provision/            # deploy bbprobe to the VMs (runs first)
@@ -99,6 +107,29 @@ robot --dryrun -V env.example.yaml tests/
 
 The `00_provision` suite deploys bbprobe and must run before the traffic-dependent
 suites (it is ordered first by the `00_` prefix, so a full `tests/` run is correct).
+
+## Mock NSX Manager (`mock_nsx/`)
+
+A small FastAPI stand-in for an NSX-T Manager, used to run the control-plane suites
+for real in CI (and locally) without a live lab — it validates the keyword/client
+plumbing (auth handshake, retries, realization polling), not NSX semantics: the
+generic Policy API store accepts and echoes back whatever you PATCH to it.
+
+```sh
+# start it (self-signed TLS by default — NsxtSession only speaks https://)
+uv run --group mock python -m mock_nsx --port 8443 &
+
+# run the control-plane suites against it (dataplane/destructive/ha/evpn tests
+# need real VMs or a real edge, so they stay excluded)
+uv run robot -d results -V env.mock.yaml -e dataplane -e destructive -e ha -e evpn tests/
+
+# or in Podman (HEALTHCHECK needs the Docker image format)
+podman build --format docker -f Containerfile.mock -t mock-nsx .
+podman run --rm -p 8443:8443 mock-nsx
+```
+
+On a host behind a corporate proxy, see the troubleshooting note at the top of
+`Containerfile.mock` if the container's HEALTHCHECK reports unhealthy.
 
 ## bbprobe deployment (data plane)
 
@@ -223,10 +254,13 @@ scripts/gen_docs.sh          # writes docs/*.html (gitignored)
 The same gates run in CI (`.github/workflows/ci.yml`):
 
 ```sh
+uv sync --locked --group dev                 # install from the committed lockfile
 uv run ruff check .                          # lint Python
-uv run mypy src/                             # type-check the library
-uv run pytest -q                             # NsxtApi unit tests (tests_unit/)
+uv run mypy src/ mock_nsx/                   # type-check the library and the mock
+uv run pytest -q --cov=nsxt_robot --cov=mock_nsx --cov-report=term  # unit tests + coverage
 uv run robocop check src/ tests/             # lint the Robot code
 uv run robot --dryrun -V env.example.yaml tests/   # all keywords/imports resolve
+# uv run --group mock python -m mock_nsx --port 8443 &        then:
+# uv run robot -V env.mock.yaml -e dataplane -e destructive -e ha -e evpn tests/
 uv build                                     # wheel + sdist in dist/
 ```

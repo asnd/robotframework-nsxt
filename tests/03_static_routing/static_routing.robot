@@ -72,6 +72,6 @@ Verify Static Route Next Hop Is Correct
 
 Verify Reachability Via Static Route
     [Documentation]    From VM1 on the T1 segment, ping the static route destination network prefix.
-    [Tags]    routing    static-route    traffic
+    [Tags]    routing    static-route    traffic    dataplane
     ${dest_ip}=    Evaluate    '${STATIC_ROUTE_NETWORK}'.split('/')[0].rsplit('.', 1)[0] + '.1'
     Ping From VM    ${VM1_IP}    ${dest_ip}

@@ -16,6 +16,7 @@ import time
 from typing import Any
 
 import requests
+import urllib3
 
 from .exceptions import (
     NsxtApiError,
@@ -138,6 +139,9 @@ class NsxtSession:
             logger.warning(
                 "TLS verification is disabled for %s — do not use outside a lab", host
             )
+            # Suppress urllib3's per-request InsecureRequestWarning: the single
+            # WARN above already says this once, per connection, more clearly.
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         self._authenticate()
 

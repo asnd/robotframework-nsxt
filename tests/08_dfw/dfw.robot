@@ -72,8 +72,8 @@ Create Source And Destination IP Groups
     [Documentation]    Create static IP groups for the VM1 (source) and VM2 (destination)
     ...                addresses — the match criteria for the DFW rule.
     [Tags]    dfw    groups    config
-    Create IP Group    ${SRC_GROUP_ID}    ${{["$VM1_IP"]}}
-    Create IP Group    ${DST_GROUP_ID}    ${{["$VM2_IP"]}}
+    Create IP Group    ${SRC_GROUP_ID}    ${{["${VM1_IP}"]}}
+    Create IP Group    ${DST_GROUP_ID}    ${{["${VM2_IP}"]}}
 
 Verify Groups Are Realized
     [Documentation]    Both groups must reach realized state before the rule references them.
@@ -102,7 +102,7 @@ Create Dynamic Tag Group
 
 Verify Baseline Connectivity Before DFW
     [Documentation]    Before any DFW rule, VM1 must be able to reach VM2.
-    [Tags]    dfw    traffic    baseline
+    [Tags]    dfw    traffic    baseline    dataplane
     Ping From VM    ${VM1_IP}    ${VM2_IP}
 
 Create DFW Deny Policy And Rule
@@ -111,7 +111,7 @@ Create DFW Deny Policy And Rule
     [Tags]    dfw    config
     Create Security Policy    ${DFW_POLICY_ID}    sequence_number=10
     Create DFW Rule    ${DFW_POLICY_ID}    ${DFW_RULE_ID}
-    ...    ${{["$SRC_GROUP_PATH"]}}    ${{["$DST_GROUP_PATH"]}}    action=DROP
+    ...    ${{["${SRC_GROUP_PATH}"]}}    ${{["${DST_GROUP_PATH}"]}}    action=DROP
 
 Verify DFW Rule Configuration
     [Documentation]    GET the policy's rules and assert the deny rule exists with action DROP.
@@ -127,12 +127,12 @@ Verify DFW Rule Is Realized
 Verify Traffic Is Blocked By DFW
     [Documentation]    With the DROP rule enforced, VM1 → VM2 ICMP must now fail. Exercises the
     ...                bbprobe deny-path assertions (bounded so failure returns quickly).
-    [Tags]    dfw    traffic    deny    end-to-end
+    [Tags]    dfw    traffic    deny    end-to-end    dataplane
     Wait Until Keyword Succeeds    2 min    15 sec    Ping Should Fail From VM    ${VM1_IP}    ${VM2_IP}
 
 Restore Connectivity By Removing DFW Rule
     [Documentation]    Delete the deny rule and confirm VM1 → VM2 connectivity is restored,
     ...                proving the block was caused by the rule and not the topology.
-    [Tags]    dfw    traffic    end-to-end
+    [Tags]    dfw    traffic    end-to-end    dataplane
     Delete DFW Rule    ${DFW_POLICY_ID}    ${DFW_RULE_ID}
     Wait Until Keyword Succeeds    2 min    15 sec    Ping From VM    ${VM1_IP}    ${VM2_IP}

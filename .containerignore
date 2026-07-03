@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.robocop_cache/
+dist/
+docs/
+results/
+tests/
+tests_unit/
+*.log
+output.xml
+log.html
+report.html
