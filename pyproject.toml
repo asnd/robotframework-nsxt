@@ -24,7 +24,6 @@ classifiers = [
 dependencies = [
     "robotframework>=6.1",
     "requests>=2.31.0",
-    "RESTinstance>=1.3.0",
     "robotframework-sshlibrary>=3.8.0",
     # Robot Framework's built-in YAML variable-file support (`-V env.yaml`) needs
     # this at runtime for any consumer of the library, not just its own dev loop.
