@@ -2,22 +2,32 @@
 Documentation    Structured data-plane validation using the `bbprobe` binary over SSH.
 ...              Replaces string-scraping ping/curl/nc with JSON-parseable probes that
 ...              carry success, per-attempt results, and latency. Also deploys the binary
-...              to the test VMs via SCP (SSHLibrary Put File).
+...              to the test VMs via SCP (SSHLibrary Put File): by default, the release
+...              matching each VM's own architecture is downloaded from the pinned
+...              ${BBPROBE_VERSION} GitHub release, checksum-verified against its
+...              published SHA256SUMS, and cached locally — set ${BBPROBE_LOCAL_PATH} to
+...              use a custom or offline/air-gapped build instead.
 Library          Collections
 Library          String
 Library          SSHLibrary
+Library          nsxt_robot.BbprobeRelease
 Resource         common.robot
 Resource         ssh_keywords.robot
 
 
 *** Variables ***
-${BBPROBE_LOCAL_PATH}     ${EMPTY}
-${BBPROBE_REMOTE_PATH}    /usr/local/bin/bbprobe
-${BBPROBE_SSH_TIMEOUT}    30s
-${PROBE_MAX_LATENCY}      2.0
+# Set an absolute path to use a custom or offline/air-gapped build instead of the
+# auto-downloaded, checksum-verified release below.
+${BBPROBE_LOCAL_PATH}          ${EMPTY}
+${BBPROBE_VERSION}             v0.9.0
+${BBPROBE_RELEASE_BASE_URL}    https://github.com/asnd/bbprobe/releases/download
+${BBPROBE_CACHE_DIR}           %{HOME}/.cache/nsxt-robot/bbprobe
+${BBPROBE_REMOTE_PATH}         /usr/local/bin/bbprobe
+${BBPROBE_SSH_TIMEOUT}         30s
+${PROBE_MAX_LATENCY}           2.0
 # Test VMs to deploy bbprobe onto. Defaults to the two-VM pair from env.yaml, but a
 # consuming suite can override @{TEST_VM_IPS} to cover any number of hosts.
-@{TEST_VM_IPS}            ${VM1_IP}    ${VM2_IP}
+@{TEST_VM_IPS}                 ${VM1_IP}    ${VM2_IP}
 
 
 *** Keywords ***
@@ -25,12 +35,32 @@ ${PROBE_MAX_LATENCY}      2.0
 # Deployment
 # ──────────────────────────────────────────────
 
+Resolve bbprobe Binary For VM
+    [Documentation]    Return a local path to a bbprobe binary that will run on ${vm_ip}.
+    ...    Uses ${BBPROBE_LOCAL_PATH} as-is when set (custom/offline build). Otherwise
+    ...    detects the VM's own architecture over the (already open) SSH connection and
+    ...    downloads + checksum-verifies the pinned ${BBPROBE_VERSION} release for it,
+    ...    caching the result under ${BBPROBE_CACHE_DIR} so repeat deploys don't re-fetch.
+    [Arguments]    ${vm_ip}
+    IF    '${BBPROBE_LOCAL_PATH}' != '${EMPTY}'
+        RETURN    ${BBPROBE_LOCAL_PATH}
+    END
+    ${uname_s}    ${rc_s}=    Execute Command    uname -s    return_rc=True
+    Should Be Equal As Integers    ${rc_s}    0    msg=uname -s failed on ${vm_ip}: ${uname_s}
+    ${uname_m}    ${rc_m}=    Execute Command    uname -m    return_rc=True
+    Should Be Equal As Integers    ${rc_m}    0    msg=uname -m failed on ${vm_ip}: ${uname_m}
+    ${asset_name}=    Get bbprobe Asset Name    ${BBPROBE_VERSION}    ${uname_s.strip()}    ${uname_m.strip()}
+    ${local_path}=    Ensure bbprobe Binary Is Cached
+    ...    ${BBPROBE_VERSION}    ${asset_name}    ${BBPROBE_CACHE_DIR}    ${BBPROBE_RELEASE_BASE_URL}
+    RETURN    ${local_path}
+
 Deploy bbprobe To VM
     [Documentation]    SCP the bbprobe binary to a VM, make it executable, verify it runs,
     ...                and grant unprivileged ICMP (setcap, else ping_group_range).
     [Arguments]    ${vm_ip}
     Ensure SSH To VM    ${vm_ip}
-    Put File    ${BBPROBE_LOCAL_PATH}    ${BBPROBE_REMOTE_PATH}    mode=0755
+    ${local_path}=    Resolve bbprobe Binary For VM    ${vm_ip}
+    Put File    ${local_path}    ${BBPROBE_REMOTE_PATH}    mode=0755
     ${out}    ${rc}=    Execute Command    ${BBPROBE_REMOTE_PATH} --version    return_rc=True
     Should Be Equal As Integers    ${rc}    0    msg=bbprobe --version failed on ${vm_ip}: ${out}
     ${cap_out}    ${cap_rc}=    Execute Command
@@ -56,9 +86,16 @@ Run bbprobe
     ${cmd}=    Set Variable
     ...    ${BBPROBE_REMOTE_PATH} --module ${module} --target ${target} --format json ${extra_args}
     ${stdout}    ${stderr}    ${rc}=    Execute Command    ${cmd}    return_stderr=True    return_rc=True
-    ${result}=    Evaluate    json.loads($stdout)    modules=json
-    Log    bbprobe ${module} → ${target} (rc=${rc}): ${result['summary']}
-    RETURN    ${result}    ${rc}
+    ${status}    ${value}=    Run Keyword And Ignore Error    Evaluate    json.loads($stdout)    modules=json
+    IF    '${status}' == 'FAIL'
+        ${msg}=    Catenate
+        ...    bbprobe produced non-JSON output for ${module} → ${target} (rc=${rc}): ${value}
+        ...    | stdout: ${stdout}
+        ...    | stderr: ${stderr}
+        Fail    ${msg}
+    END
+    Log    bbprobe ${module} → ${target} (rc=${rc}): ${value['summary']}
+    RETURN    ${value}    ${rc}
 
 Get Probe Result
     [Documentation]    Return the parsed bbprobe result dict for custom assertions.

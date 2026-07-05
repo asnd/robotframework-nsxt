@@ -13,6 +13,10 @@ ${MGMT_BASE}        /api/v1
 # Shared topology paths (previously redefined in every suite). Resolved from env.yaml.
 ${T0_PATH}          /infra/tier-0s/${T0_GATEWAY_ID}
 ${OVERLAY_TZ_PATH}  /infra/sites/default/enforcement-points/default/transport-zones/${OVERLAY_TZ_ID}
+# Per-request timeout (seconds) for every NSX REST call below, so an unresponsive
+# NSX Manager fails a keyword instead of hanging the suite indefinitely. Override
+# in env.yaml if your fabric's realization-adjacent calls are legitimately slower.
+${NSX_REQUEST_TIMEOUT}    30
 
 
 *** Keywords ***
@@ -39,7 +43,7 @@ Initialize REST Session
 NSX REST GET
     [Documentation]    Perform a GET request against the NSX API and return the parsed body.
     [Arguments]    ${path}
-    GET    ${path}
+    GET    ${path}    timeout=${NSX_REQUEST_TIMEOUT}
     Integer    response status    200
     ${body}=    Output    response body
     RETURN    ${body}
@@ -47,7 +51,7 @@ NSX REST GET
 NSX REST PATCH
     [Documentation]    Perform a PATCH request and return the parsed response body.
     [Arguments]    ${path}    ${body}
-    PATCH    ${path}    ${body}
+    PATCH    ${path}    ${body}    timeout=${NSX_REQUEST_TIMEOUT}
     Integer    response status    200
     ${resp_body}=    Output    response body
     RETURN    ${resp_body}
@@ -57,9 +61,9 @@ NSX REST POST
     ...                parsed response body. Accepts 200 or 202 (action accepted/async).
     [Arguments]    ${path}    ${body}=${EMPTY}
     IF    '${body}' != '${EMPTY}'
-        POST    ${path}    ${body}
+        POST    ${path}    ${body}    timeout=${NSX_REQUEST_TIMEOUT}
     ELSE
-        POST    ${path}
+        POST    ${path}    timeout=${NSX_REQUEST_TIMEOUT}
     END
     ${status}=    Output    response status
     Should Be True    ${status} in [200, 202]    msg=POST ${path} returned unexpected status: ${status}
@@ -69,7 +73,7 @@ NSX REST POST
 NSX REST DELETE
     [Documentation]    Perform a DELETE request. Accepts 200 or 204 responses.
     [Arguments]    ${path}
-    DELETE    ${path}
+    DELETE    ${path}    timeout=${NSX_REQUEST_TIMEOUT}
     ${status}=    Output    response status
     Should Be True    ${status} in [200, 204]    msg=DELETE ${path} returned unexpected status: ${status}
     RETURN    ${status}

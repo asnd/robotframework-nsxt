@@ -17,6 +17,7 @@ Typical usage from a consuming suite::
 from __future__ import annotations
 
 from .api import NsxtApi
+from .bbprobe_release import BbprobeRelease
 
 __version__ = "0.1.0"
-__all__ = ["NsxtApi", "__version__"]
+__all__ = ["BbprobeRelease", "NsxtApi", "__version__"]

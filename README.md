@@ -84,10 +84,12 @@ cp env.example.yaml env.yaml    # then edit (env.yaml is gitignored)
   CI can inject secrets without a creds file on disk. Passwords are never logged.
 - Two Linux test VMs reachable over SSH (`VM1_IP`, `VM2_IP`); override `VM_SSH_PORT`
   (default `22`) and `@{TEST_VM_IPS}` to change the port or the set of probed hosts.
-- The **bbprobe binary** for the VM architecture (usually `linux/amd64`). Download a
-  release asset from [asnd/bbprobe](https://github.com/asnd/bbprobe/releases) (e.g.
-  `bbprobe-v0.9.0-linux-amd64`) and set an absolute `BBPROBE_LOCAL_PATH` to it — the
-  variable has no default, so this must be set before running `tests/00_provision`.
+- The **bbprobe binary**: by default, no setup needed — `deploy_bbprobe.robot` detects
+  each test VM's own architecture over SSH and downloads + checksum-verifies the pinned
+  `BBPROBE_VERSION` release from [asnd/bbprobe](https://github.com/asnd/bbprobe/releases),
+  caching it under `~/.cache/nsxt-robot/bbprobe/`. To use a custom or offline/air-gapped
+  build instead, set an absolute `BBPROBE_LOCAL_PATH` and it's used as-is, skipping the
+  download.
 
 ## Running
 
@@ -111,12 +113,22 @@ suites (it is ordered first by the `00_` prefix, so a full `tests/` run is corre
 `tests/00_provision/deploy_bbprobe.robot` copies the binary to every VM before any
 traffic test runs. It uses the keywords in `nsxt_robot/resources/bbprobe_keywords.robot`:
 
-- **`Deploy bbprobe To VM  ${vm_ip}`** — SCPs `${BBPROBE_LOCAL_PATH}` to
-  `${BBPROBE_REMOTE_PATH}` (`/usr/local/bin/bbprobe`) via SSHLibrary `Put File`
-  (`mode=0755`), runs `bbprobe --version` to confirm it works, and grants
-  unprivileged ICMP.
+- **`Deploy bbprobe To VM  ${vm_ip}`** — resolves a local bbprobe binary for the VM
+  (see below), SCPs it to `${BBPROBE_REMOTE_PATH}` (`/usr/local/bin/bbprobe`) via
+  SSHLibrary `Put File` (`mode=0755`), runs `bbprobe --version` to confirm it works,
+  and grants unprivileged ICMP.
 - **`Deploy bbprobe To All Test VMs`** — loops every host in `@{TEST_VM_IPS}`
   (default `VM1_IP`, `VM2_IP`; override to cover any number of VMs).
+- **`Resolve bbprobe Binary For VM  ${vm_ip}`** — if `${BBPROBE_LOCAL_PATH}` is set,
+  returns it as-is (custom/offline build). Otherwise runs `uname -s`/`uname -m` on the
+  VM over the existing SSH connection, resolves the matching release asset name via
+  `nsxt_robot.BbprobeRelease`'s `Get bbprobe Asset Name` keyword, and downloads +
+  checksum-verifies it with `Ensure bbprobe Binary Is Cached` — checked against the
+  release's published `SHA256SUMS` before it's ever SCP'd to a VM and executed there.
+  Cached locally under `${BBPROBE_CACHE_DIR}` (default `~/.cache/nsxt-robot/bbprobe/`)
+  keyed by `${BBPROBE_VERSION}`, so repeat deploys don't re-download. Only Linux
+  amd64/386 and Darwin arm64 have published bbprobe releases today; deploying to any
+  other target architecture requires `${BBPROBE_LOCAL_PATH}`.
 
 ### ICMP without root
 
