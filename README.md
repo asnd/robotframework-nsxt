@@ -21,30 +21,38 @@ nsxt-robot/
 │   ├── api.py                   # NsxtApi: JSON extraction + typed status assertions
 │   └── resources/
 │       ├── common.robot         # REST session, realization polling, shared vars, teardown
-│       ├── policy_api.robot     # NSX Policy/Mgmt API operations (T1/segment/BGP/NAT/LB/DFW/…)
+│       ├── policy_api.robot     # NSX Policy/Mgmt API operations (T1/segment/BGP/NAT/LB/DFW/Gateway FW/…)
 │       ├── ssh_keywords.robot   # pooled SSH connection management (reused per host)
 │       ├── traffic_keywords.robot  # SSH traffic keywords (reachability delegates to bbprobe)
 │       ├── bbprobe_keywords.robot  # deploy + run bbprobe; structured probe assertions
 │       └── failure_keywords.robot  # fault injection: segment/BGP/edge-node + convergence asserts
 ├── tests_unit/                  # pytest unit tests for NsxtApi (pure Python)
 ├── scripts/gen_docs.sh          # generate libdoc keyword docs into docs/
-└── tests/                       # Robot acceptance suites (consume the library)
-    ├── 00_provision/            # deploy bbprobe to the VMs (runs first)
-    ├── 01_infra/  02_t1_connectivity/  03_static_routing/
-    ├── 04_bgp_bfd/  05_ha_vip/  06_snat/  (SNAT + DNAT)  07_alb_l4/
-    ├── 08_dfw/                  # distributed firewall micro-segmentation (groups, tags, allow/deny)
-    ├── 09_alb_l7/               # L7 HTTP load balancer + active health monitor
-    ├── 10_t0_vrf/               # T0-VRF gateway: uplink interface, static routing, BFD, BGP, EVPN
-    └── 11_failover/             # fault injection: segment/BGP/edge-node failures + recovery SLA
+├── tests/                       # Robot acceptance suites (consume the library)
+│   ├── 00_provision/            # deploy bbprobe to the VMs (runs first)
+│   ├── 01_infra/  02_t1_connectivity/  03_static_routing/
+│   ├── 04_bgp_bfd/  05_ha_vip/  06_snat/  (SNAT + DNAT)  07_alb_l4/
+│   ├── 08_dfw/                  # distributed firewall micro-segmentation (groups, tags, allow/deny)
+│   ├── 09_alb_l7/               # L7 HTTP load balancer + active health monitor
+│   ├── 10_t0_vrf/               # T0-VRF gateway: uplink interface, static routing, BFD, BGP, EVPN
+│   └── 11_failover/             # fault injection: segment/BGP/edge-node failures + recovery SLA
+└── examples/                    # small, self-contained suites to copy as a starting point
+    ├── 01_load_balancer_service/
+    ├── 02_t1_gateway_firewall/
+    └── 03_t0_vrf_bgp_bfd/
 ```
 
 Service coverage: infra health, T1 connectivity, static routing, BGP/BFD, HA VIP,
-NAT (SNAT + DNAT), L4 + L7 load balancing with health monitors, distributed
-firewall micro-segmentation (IP + dynamic tag groups, allow/deny enforcement),
-Tier-0 VRF gateways (VRF-lite and EVPN: external interfaces, VRF static routing with
-BFD-protected next hops, VRF BGP, RD/RT/transit-VNI), and fault injection with
-recovery-SLA assertions (segment/BGP/edge-node failures). Data-plane assertions include
-reachability, latency SLA, deny-path verification, and overlay MTU.
+NAT (SNAT + DNAT), L4 + L7 load balancing with health monitors, distributed firewall
+micro-segmentation (IP + dynamic tag groups, allow/deny enforcement), Gateway Firewall
+(centralized T0/T1 edge firewall, distinct from DFW), Tier-0 VRF gateways (VRF-lite and
+EVPN: external interfaces, VRF static routing with BFD-protected next hops, VRF BGP,
+RD/RT/transit-VNI), and fault injection with recovery-SLA assertions (segment/BGP/edge-node
+failures). Data-plane assertions include reachability, latency SLA, deny-path verification,
+and overlay MTU.
+
+See [`examples/`](examples/) for copyable, focused suites covering NSX service testing
+(load balancing), Gateway Firewall, and T0-VRF BGP/BFD.
 
 ## Install
 
@@ -76,10 +84,10 @@ cp env.example.yaml env.yaml    # then edit (env.yaml is gitignored)
   CI can inject secrets without a creds file on disk. Passwords are never logged.
 - Two Linux test VMs reachable over SSH (`VM1_IP`, `VM2_IP`); override `VM_SSH_PORT`
   (default `22`) and `@{TEST_VM_IPS}` to change the port or the set of probed hosts.
-- The **bbprobe binary** for the VM architecture (usually `linux/amd64`). Build it from
-  the sibling `blackbox-ssh` repo (`make linux-amd64` → `dist/bbprobe-linux-amd64`); the
-  default `BBPROBE_LOCAL_PATH` resolves to it relative to this repo. To use a different
-  build (e.g. a downloaded `v0.9.0` release asset), set an absolute `BBPROBE_LOCAL_PATH`.
+- The **bbprobe binary** for the VM architecture (usually `linux/amd64`). Download a
+  release asset from [asnd/bbprobe](https://github.com/asnd/bbprobe/releases) (e.g.
+  `bbprobe-v0.9.0-linux-amd64`) and set an absolute `BBPROBE_LOCAL_PATH` to it — the
+  variable has no default, so this must be set before running `tests/00_provision`.
 
 ## Running
 
@@ -160,7 +168,23 @@ keywords parse and assert on them, replacing `Get From Dictionary` chains and
 | `Pool Member Should Be Up  pool_status` | Assert every LB pool member is UP |
 | `NAT Rule Should Exist  rules  rule_id  [action]  [translated]` | Assert a NAT rule (SNAT/DNAT) exists with the expected fields |
 | `DFW Rule Should Have Action  rules  rule_id  action` | Assert a DFW rule exists with ALLOW/DROP/REJECT |
+| `Gateway Firewall Rule Should Have Action  rules  rule_id  action` | Assert a Gateway Firewall rule exists with ALLOW/DROP/REJECT |
 | `Group Should Have Member  members  ip_or_name` | Assert a group's effective members include a VM by IP or name |
+
+## Gateway Firewall vs DFW (`policy_api.robot`)
+
+Two different firewalls live in the Policy API and this library covers both:
+
+| | DFW (`tests/08_dfw`) | Gateway Firewall (`examples/02_t1_gateway_firewall`) |
+|---|---|---|
+| Enforcement point | Distributed — at the vNIC | Centralized — at the T0/T1 edge |
+| Endpoint | `/infra/domains/{domain}/security-policies` | `/infra/domains/{domain}/gateway-policies` |
+| Scope | Domain-wide, matched by group membership | Per-rule `scope`: the specific T0/T1 gateway path it applies to |
+| Keywords | `Create Security Policy` / `Create DFW Rule` / `Get DFW Rules` / `Delete DFW Rule` / `Delete Security Policy` | `Create Gateway Firewall Policy` / `Create Gateway Firewall Rule` / `Get Gateway Firewall Rules` / `Delete Gateway Firewall Rule` / `Delete Gateway Firewall Policy` |
+
+Gateway Firewall rule/policy `category` naming (e.g. `LocalGatewayRules`, the default here)
+is version-sensitive across NSX releases, like EVPN below — verify against your release's
+API reference on the first live run.
 
 ## T0-VRF and EVPN (`policy_api.robot` + `tests/10_t0_vrf`)
 
@@ -224,7 +248,7 @@ The same gates run in CI (`.github/workflows/ci.yml`):
 uv run ruff check .                          # lint Python
 uv run mypy src/                             # type-check the library
 uv run pytest -q                             # NsxtApi unit tests (tests_unit/)
-uv run robocop check src/ tests/             # lint the Robot code
-uv run robot --dryrun -V env.example.yaml tests/   # all keywords/imports resolve
+uv run robocop check src/ tests/ examples/            # lint the Robot code
+uv run robot --dryrun -V env.example.yaml tests/ examples/   # all keywords/imports resolve
 uv build                                     # wheel + sdist in dist/
 ```

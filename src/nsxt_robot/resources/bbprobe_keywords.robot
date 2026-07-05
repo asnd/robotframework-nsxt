@@ -11,7 +11,7 @@ Resource         ssh_keywords.robot
 
 
 *** Variables ***
-${BBPROBE_LOCAL_PATH}     ${CURDIR}/../../../../blackbox-ssh/dist/bbprobe-linux-amd64
+${BBPROBE_LOCAL_PATH}     ${EMPTY}
 ${BBPROBE_REMOTE_PATH}    /usr/local/bin/bbprobe
 ${BBPROBE_SSH_TIMEOUT}    30s
 ${PROBE_MAX_LATENCY}      2.0

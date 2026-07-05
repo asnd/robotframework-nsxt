@@ -183,6 +183,22 @@ class NsxtApi:
         return rule
 
     @keyword
+    def gateway_firewall_rule_should_have_action(
+        self, rules_body: Any, rule_id: str, action: str
+    ) -> dict:
+        """Assert a Gateway Firewall rule exists in ``rules_body`` with the expected ``action``.
+
+        ``action`` is one of ``ALLOW`` / ``DROP`` / ``REJECT``.
+        """
+        rule = self.find_in_list(rules_body, "id", rule_id)
+        if rule.get("action") != action:
+            raise AssertionError(
+                f"Gateway Firewall rule {rule_id} action is '{rule.get('action')}', "
+                f"expected '{action}'"
+            )
+        return rule
+
+    @keyword
     def group_should_have_member(self, members_body: Any, ip_or_name: str) -> dict:
         """Assert a group's effective-member list contains a VM matching ``ip_or_name``.
 

@@ -662,6 +662,69 @@ Delete Security Policy
     Safe Delete Policy Object    ${INFRA_BASE}/domains/${domain}/security-policies/${policy_id}
 
 # ──────────────────────────────────────────────
+# Gateway Firewall (T0/T1 edge/perimeter firewall)
+# ──────────────────────────────────────────────
+# Distinct from DFW above: DFW is distributed (east-west, enforced at the vNIC) and
+# lives under .../security-policies. Gateway Firewall is centralized (north-south,
+# enforced at the T0/T1 edge) and lives under .../gateway-policies, with each rule
+# scoped to the specific gateway path it applies to. Category naming is
+# version-sensitive across NSX releases, like EVPN below — LocalGatewayRules is the
+# common default; verify against your release's API reference on the first live run.
+
+Create Gateway Firewall Policy
+    [Documentation]    Create (or update) an empty Gateway Firewall policy in a domain. Lower
+    ...    ${sequence_number} values are evaluated first relative to other gateway policies.
+    [Arguments]    ${policy_id}    ${sequence_number}=10    ${category}=LocalGatewayRules    ${domain}=default
+    ${body}=    Create Dictionary
+    ...    display_name=${policy_id}
+    ...    category=${category}
+    ...    sequence_number=${sequence_number}
+    NSX REST PATCH    ${INFRA_BASE}/domains/${domain}/gateway-policies/${policy_id}    ${body}
+    Log    Created gateway firewall policy ${policy_id} (category ${category})
+
+Create Gateway Firewall Rule
+    [Documentation]    Create a gateway (edge/perimeter) firewall rule inside a gateway policy,
+    ...    scoped to ${gateway_path} (the T0/T1 Policy path this rule applies to, e.g.
+    ...    /infra/tier-1s/T1_ID). ${action} is ALLOW, DROP, or REJECT.
+    ...    ${source_groups}/${destination_groups}/${services} are lists of Policy paths
+    ...    (or ["ANY"]).
+    [Arguments]    ${policy_id}    ${rule_id}    ${gateway_path}    ${source_groups}    ${destination_groups}
+    ...    ${action}=ALLOW    ${services}=${{['ANY']}}    ${sequence_number}=10    ${domain}=default
+    ${scope}=    Create List    ${gateway_path}
+    ${body}=    Create Dictionary
+    ...    display_name=${rule_id}
+    ...    source_groups=${source_groups}
+    ...    destination_groups=${destination_groups}
+    ...    services=${services}
+    ...    action=${action}
+    ...    direction=IN_OUT
+    ...    ip_protocol=IPV4_IPV6
+    ...    scope=${scope}
+    ...    sequence_number=${sequence_number}
+    NSX REST PATCH
+    ...    ${INFRA_BASE}/domains/${domain}/gateway-policies/${policy_id}/rules/${rule_id}
+    ...    ${body}
+    Log    Created gateway firewall rule ${rule_id} (${action}) in policy ${policy_id}, scope ${gateway_path}
+
+Get Gateway Firewall Rules
+    [Documentation]    List the rules of a gateway firewall policy.
+    [Arguments]    ${policy_id}    ${domain}=default
+    ${body}=    NSX REST GET
+    ...    ${INFRA_BASE}/domains/${domain}/gateway-policies/${policy_id}/rules
+    RETURN    ${body}
+
+Delete Gateway Firewall Rule
+    [Documentation]    Delete a single gateway firewall rule from a gateway policy.
+    [Arguments]    ${policy_id}    ${rule_id}    ${domain}=default
+    Safe Delete Policy Object
+    ...    ${INFRA_BASE}/domains/${domain}/gateway-policies/${policy_id}/rules/${rule_id}
+
+Delete Gateway Firewall Policy
+    [Documentation]    Delete a gateway firewall policy (and all its rules) by ID.
+    [Arguments]    ${policy_id}    ${domain}=default
+    Safe Delete Policy Object    ${INFRA_BASE}/domains/${domain}/gateway-policies/${policy_id}
+
+# ──────────────────────────────────────────────
 # EVPN (NSX 3.1+ / 4.x)
 # ──────────────────────────────────────────────
 # Field names follow the NSX 4.x EvpnConfig/VniPoolConfig schemas. EVPN endpoints

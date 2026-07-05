@@ -190,6 +190,22 @@ def test_dfw_rule_missing_raises(api):
         api.dfw_rule_should_have_action({"results": []}, "deny-1", "DROP")
 
 
+def test_gateway_firewall_rule_action_matches(api):
+    body = {"results": [{"id": "deny-1", "action": "DROP"}, {"id": "allow-1", "action": "ALLOW"}]}
+    assert api.gateway_firewall_rule_should_have_action(body, "deny-1", "DROP")["id"] == "deny-1"
+
+
+def test_gateway_firewall_rule_wrong_action_raises(api):
+    body = {"results": [{"id": "deny-1", "action": "ALLOW"}]}
+    with pytest.raises(AssertionError, match="expected 'DROP'"):
+        api.gateway_firewall_rule_should_have_action(body, "deny-1", "DROP")
+
+
+def test_gateway_firewall_rule_missing_raises(api):
+    with pytest.raises(AssertionError, match="No item with id='deny-1'"):
+        api.gateway_firewall_rule_should_have_action({"results": []}, "deny-1", "DROP")
+
+
 def test_group_member_matches_by_ip(api):
     body = {"results": [{"display_name": "web-vm", "ip_addresses": ["172.16.1.10"]}]}
     assert api.group_should_have_member(body, "172.16.1.10")["display_name"] == "web-vm"
