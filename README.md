@@ -264,3 +264,5 @@ uv run robocop check src/ tests/ examples/            # lint the Robot code
 uv run robot --dryrun -V env.example.yaml tests/ examples/   # all keywords/imports resolve
 uv build                                     # wheel + sdist in dist/
 ```
+
+See [`CHANGELOG.md`](CHANGELOG.md) for what's changed.
