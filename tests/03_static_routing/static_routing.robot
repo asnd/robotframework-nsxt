@@ -50,9 +50,7 @@ Verify Static Route Is Present
     [Documentation]    GET static routes on T1 and assert the test route appears in the list.
     [Tags]    routing    static-route
     ${routes}=    Get Static Routes On T1    ${T1A_ID}
-    ${route_list}=    Get From Dictionary    ${routes}    results
-    ${route_networks}=    Evaluate    [r.get('network', '') for r in ${route_list}]
-    Should Contain    ${route_networks}    ${STATIC_ROUTE_NETWORK}
+    Find In List    ${routes}    network    ${STATIC_ROUTE_NETWORK}
     Log    Static route ${STATIC_ROUTE_NETWORK} found on T1 ${T1A_ID}
 
 Verify Static Route Is Realized
@@ -72,6 +70,6 @@ Verify Static Route Next Hop Is Correct
 
 Verify Reachability Via Static Route
     [Documentation]    From VM1 on the T1 segment, ping the static route destination network prefix.
-    [Tags]    routing    static-route    traffic
+    [Tags]    routing    static-route    traffic    dataplane
     ${dest_ip}=    Evaluate    '${STATIC_ROUTE_NETWORK}'.split('/')[0].rsplit('.', 1)[0] + '.1'
     Ping From VM    ${VM1_IP}    ${dest_ip}

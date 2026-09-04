@@ -141,7 +141,7 @@ Attach EVPN RD RT And Transit VNI To VRF
     [Tags]    vrf    evpn    config
     Create VRF Gateway On T0    ${VRF_ID}    VRF-Red    ${T0_PATH}
     ...    route_distinguisher=${VRF_RD}    evpn_transit_vni=${VRF_EVPN_TRANSIT_VNI}
-    ...    import_rts=${{["$VRF_RT_IMPORT"]}}    export_rts=${{["$VRF_RT_EXPORT"]}}
+    ...    import_rts=${{["${VRF_RT_IMPORT}"]}}    export_rts=${{["${VRF_RT_EXPORT}"]}}
     ${vrf}=    Get T0 Gateway    ${VRF_ID}
     ${rd}=    Get Value    ${vrf}    vrf_config.route_distinguisher
     Should Be Equal As Strings    ${rd}    ${VRF_RD}

@@ -5,7 +5,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-uv.lock
 
 # Tool caches
 .mypy_cache/
@@ -21,6 +20,15 @@ output.xml
 log.html
 report.html
 *.log
+results/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+
+# mock_nsx local runs
+mock_nsx.pid
 
 # macOS
 .DS_Store

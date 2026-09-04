@@ -118,5 +118,5 @@ Verify Pool Member Is Healthy
 Verify L4 Traffic Through VIP
     [Documentation]    From VM2, send HTTP traffic to the LB VIP and assert a successful
     ...                2xx response via bbprobe, confirming L4 load balancing is working.
-    [Tags]    alb    traffic    end-to-end
+    [Tags]    alb    traffic    end-to-end    dataplane
     Probe Should Succeed    ${VM2_IP}    http_2xx    http://${ALB_VIP}:${ALB_VIP_PORT}

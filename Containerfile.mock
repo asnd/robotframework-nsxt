@@ -1,0 +1,42 @@
+# Dev-only image for the mock NSX Manager (mock_nsx/) — never published, used
+# locally or in CI to run the Robot suites against a hermetic NSX-T stand-in.
+#
+# HEALTHCHECK requires the Docker image format:
+#   podman build --format docker -f Containerfile.mock -t mock-nsx .
+#   podman run --rm -p 8443:8443 mock-nsx
+#
+# On a host behind a corporate HTTP(S) proxy, Podman machine can forward the
+# host's proxy env vars into the container at run time, overriding the
+# image's own NO_PROXY below and breaking the loopback HEALTHCHECK with a
+# proxy tunnel error. If `podman inspect <container> --format
+# '{{.State.Health.Status}}'` reports "unhealthy" and `podman exec <container>
+# env | grep -i proxy` shows an *_PROXY var without localhost/127.0.0.1 in
+# NO_PROXY, override it explicitly at run time:
+#   podman run --rm -p 8443:8443 \
+#     -e NO_PROXY=localhost,127.0.0.1 -e no_proxy=localhost,127.0.0.1 \
+#     -e HTTP_PROXY= -e HTTPS_PROXY= -e http_proxy= -e https_proxy= \
+#     mock-nsx
+FROM python:3.12-slim
+
+# Baseline for hosts that don't forward proxy env vars into the container.
+ENV NO_PROXY="localhost,127.0.0.1" \
+    no_proxy="localhost,127.0.0.1"
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY src/ src/
+COPY mock_nsx/ mock_nsx/
+
+RUN uv sync --locked --no-default-groups --group mock
+
+EXPOSE 8443
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD uv run python -c "\
+import ssl, urllib.request; \
+ctx = ssl._create_unverified_context(); \
+urllib.request.urlopen('https://localhost:8443/mock/health', context=ctx, timeout=2)" || exit 1
+
+CMD ["uv", "run", "python", "-m", "mock_nsx", "--port", "8443"]

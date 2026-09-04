@@ -73,14 +73,14 @@ Failover Suite Teardown
 *** Test Cases ***
 Verify Baseline Connectivity
     [Documentation]    Before any fault injection, VM1 must reach VM2 across the topology.
-    [Tags]    baseline
+    [Tags]    baseline    dataplane
     Ping From VM    ${VM1_IP}    ${VM2_IP}
 
 Segment Failure Blocks Then Recovers Traffic
     [Documentation]    Setting SEG_B admin_state DOWN represents a segment (or T0/T0-VRF
     ...                uplink) failure: VM2's segment goes down, so VM1 -> VM2 must stop
     ...                working, then recover once the segment is restored.
-    [Tags]    segment
+    [Tags]    segment    dataplane
     Fail Segment    ${SEG_B_ID}
     Data Plane Should Be Down Within    ${VM1_IP}    icmp    ${VM2_IP}
     Restore Segment    ${SEG_B_ID}
@@ -101,7 +101,7 @@ Edge Maintenance Mode Fails Traffic Over
     [Documentation]    Draining edge 0 must not break VM1 -> VM2 connectivity for longer
     ...                than ${FAILOVER_MAX_RECOVERY} — traffic should fail over to the
     ...                peer edge. Requires >= 2 edges in ${EDGE_CLUSTER_ID}.
-    [Tags]    ha
+    [Tags]    ha    dataplane
     Enter Edge Maintenance Mode    ${EDGE1_NSX_ID}
     ${node}=    Wait Until Keyword Succeeds    1 min    5 sec    Get Transport Node    ${EDGE1_NSX_ID}
     Transport Node Should Be In Maintenance    ${node}
@@ -112,7 +112,7 @@ Edge Dataplane Restart Recovers Within SLA
     [Documentation]    DESTRUCTIVE: restarts the dataplane service on EDGE1_MGMT_IP over
     ...                SSH and asserts traffic recovers within ${FAILOVER_MAX_RECOVERY}.
     ...                Skipped unless ${EDGE_PASSWORD} is set.
-    [Tags]    destructive
+    [Tags]    destructive    dataplane
     Skip If    '${EDGE_PASSWORD}' == '${EMPTY}'    EDGE_PASSWORD not set — skipping destructive edge test
     Restart Edge Dataplane    ${EDGE1_MGMT_IP}
     Data Plane Should Recover Within    ${VM1_IP}    icmp    ${VM2_IP}
@@ -121,7 +121,7 @@ Edge Reboot Recovers Within Extended SLA
     [Documentation]    DESTRUCTIVE: reboots EDGE1_MGMT_IP over SSH and asserts traffic
     ...                recovers within ${EDGE_REBOOT_MAX_RECOVERY} (minutes, not seconds).
     ...                Skipped unless ${EDGE_PASSWORD} is set.
-    [Tags]    destructive    reboot
+    [Tags]    destructive    reboot    dataplane
     Skip If    '${EDGE_PASSWORD}' == '${EMPTY}'    EDGE_PASSWORD not set — skipping destructive edge test
     Reboot Edge Node    ${EDGE1_MGMT_IP}
     Data Plane Should Recover Within    ${VM1_IP}    icmp    ${VM2_IP}    ${EDGE_REBOOT_MAX_RECOVERY}

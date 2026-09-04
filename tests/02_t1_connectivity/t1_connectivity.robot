@@ -63,23 +63,23 @@ Verify T1-B Gateway Configuration
 Verify Inter-T1 Connectivity
     [Documentation]    Correlate control plane and data plane: wait until both segments are
     ...                realized, then probe VM1 → VM2 (traffic traverses VM1 → T1-A → T0 → T1-B → VM2).
-    [Tags]    t1    traffic
+    [Tags]    t1    traffic    dataplane
     Service Data Plane Should Be Reachable    ${VM1_IP}    icmp    ${VM2_IP}
     ...    /infra/segments/${SEG_A_ID}    /infra/segments/${SEG_B_ID}
 
 Verify Inter-T1 Latency Within SLA
     [Documentation]    Beyond reachability, assert the VM1 → VM2 round-trip stays under the
     ...                ${PROBE_MAX_LATENCY}s budget, catching a slow/degraded overlay path.
-    [Tags]    t1    traffic    latency
+    [Tags]    t1    traffic    latency    dataplane
     Probe Latency Should Be Below    ${VM1_IP}    icmp    ${VM2_IP}    ${PROBE_MAX_LATENCY}
 
 Verify Overlay MTU End To End
     [Documentation]    Prove the VM1 → VM2 overlay path carries a full 1500-byte inner frame
     ...                without fragmenting (DF-bit ping), validating the NSX TEP MTU headroom.
-    [Tags]    t1    traffic    mtu
+    [Tags]    t1    traffic    mtu    dataplane
     Verify Overlay MTU From VM    ${VM1_IP}    ${VM2_IP}    ${OVERLAY_MTU_PAYLOAD}
 
 Verify T1 To External Connectivity
     [Documentation]    SSH to VM1 and ping an IP outside NSX to verify T0 uplink routing.
-    [Tags]    t1    traffic    external
+    [Tags]    t1    traffic    external    dataplane
     Ping From VM    ${VM1_IP}    ${EXTERNAL_TEST_IP}

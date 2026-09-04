@@ -3,11 +3,12 @@ Documentation    Common setup, teardown, and utility keywords shared across all 
 Library          Collections
 Library          OperatingSystem
 Library          String
-Library          REST    https://${NSX_MANAGER}    ssl_verify=${VERIFY_SSL}
+Library          nsxt_robot.NsxtLibrary
 Library          nsxt_robot.NsxtApi
 
 
 *** Variables ***
+${NSX_PORT}         ${443}
 ${POLICY_BASE}      /policy/api/v1
 ${MGMT_BASE}        /api/v1
 # Shared topology paths (previously redefined in every suite). Resolved from env.yaml.
@@ -17,89 +18,22 @@ ${OVERLAY_TZ_PATH}  /infra/sites/default/enforcement-points/default/transport-zo
 
 *** Keywords ***
 Initialize REST Session
-    [Documentation]    Configure authentication headers on the shared RESTinstance session.
-    ...                The password comes from the ${NSX_PASSWORD} variable (env.yaml) but the
-    ...                NSX_PASSWORD environment variable, when set, wins — so CI can inject a
-    ...                secret without a creds file on disk. Credential assembly runs with logging
-    ...                suppressed so the password and the Basic-auth header never reach the log.
-    # BuiltIn-qualified: RESTinstance also defines 'Set Log Level' (which controls only
-    # its own logging), so an unqualified call would not suppress the Robot log.
-    ${previous_level}=    BuiltIn.Set Log Level    NONE
+    [Documentation]    Open the shared NSX connection (alias 'default') used by every
+    ...                `NSX REST *` and realization keyword. The password comes from the
+    ...                ${NSX_PASSWORD} variable (env.yaml) but the NSX_PASSWORD environment
+    ...                variable, when set, wins — so CI can inject a secret without a creds
+    ...                file on disk. Credential resolution runs with logging suppressed so
+    ...                the password never reaches the log.
+    ${previous_level}=    Set Log Level    NONE
     ${password}=    Set Variable    ${NSX_PASSWORD}
     ${env_password}=    Get Environment Variable    NSX_PASSWORD    ${EMPTY}
     IF    '${env_password}' != '${EMPTY}'
         ${password}=    Set Variable    ${env_password}
     END
-    ${raw}=    Set Variable    ${NSX_USER}:${password}
-    ${auth}=    Evaluate    base64.b64encode($raw.encode()).decode()    modules=base64
-    Set Headers    {"Authorization": "Basic ${auth}", "Content-Type": "application/json", "Accept": "application/json"}
-    BuiltIn.Set Log Level    ${previous_level}
-    Log    REST auth headers configured for ${NSX_MANAGER}
-
-NSX REST GET
-    [Documentation]    Perform a GET request against the NSX API and return the parsed body.
-    [Arguments]    ${path}
-    GET    ${path}
-    Integer    response status    200
-    ${body}=    Output    response body
-    RETURN    ${body}
-
-NSX REST PATCH
-    [Documentation]    Perform a PATCH request and return the parsed response body.
-    [Arguments]    ${path}    ${body}
-    PATCH    ${path}    ${body}
-    Integer    response status    200
-    ${resp_body}=    Output    response body
-    RETURN    ${resp_body}
-
-NSX REST POST
-    [Documentation]    Perform a POST request (e.g. an action endpoint) and return the
-    ...                parsed response body. Accepts 200 or 202 (action accepted/async).
-    [Arguments]    ${path}    ${body}=${EMPTY}
-    IF    '${body}' != '${EMPTY}'
-        POST    ${path}    ${body}
-    ELSE
-        POST    ${path}
-    END
-    ${status}=    Output    response status
-    Should Be True    ${status} in [200, 202]    msg=POST ${path} returned unexpected status: ${status}
-    ${resp_body}=    Output    response body
-    RETURN    ${resp_body}
-
-NSX REST DELETE
-    [Documentation]    Perform a DELETE request. Accepts 200 or 204 responses.
-    [Arguments]    ${path}
-    DELETE    ${path}
-    ${status}=    Output    response status
-    Should Be True    ${status} in [200, 204]    msg=DELETE ${path} returned unexpected status: ${status}
-    RETURN    ${status}
-
-NSX REST DELETE Ignore Error
-    [Documentation]    DELETE that logs warnings but does not fail — for use in teardowns.
-    [Arguments]    ${path}
-    ${result}    ${value}=    Run Keyword And Ignore Error    NSX REST DELETE    ${path}
-    IF    '${result}' == 'FAIL'
-        Log    DELETE ${path} failed (ignored): ${value}    WARN
-    END
-
-Verify Realized
-    [Documentation]    Assert the realization status for a Policy API intent path is SUCCESS.
-    [Arguments]    ${intent_path}
-    ${encoded}=    Evaluate    urllib.parse.quote($intent_path, safe='')    modules=urllib.parse
-    ${body}=    NSX REST GET    ${POLICY_BASE}/infra/realized-state/status?intent_path=${encoded}
-    Realized State Should Be Success    ${body}
-
-Wait For Realization
-    [Documentation]    Poll realization status up to 2 minutes until SUCCESS.
-    [Arguments]    ${intent_path}
-    Wait Until Keyword Succeeds    2 min    10 sec    Verify Realized    ${intent_path}
-
-Wait For Realizations
-    [Documentation]    Wait for realization of every intent path in the given list.
-    [Arguments]    @{intent_paths}
-    FOR    ${path}    IN    @{intent_paths}
-        Wait For Realization    ${path}
-    END
+    Open Nsx Connection    ${NSX_MANAGER}    ${NSX_USER}    ${password}
+    ...    alias=default    port=${NSX_PORT}    verify=${VERIFY_SSL}
+    Set Log Level    ${previous_level}
+    Log    NSX connection opened for ${NSX_MANAGER}:${NSX_PORT}
 
 Standard Suite Teardown
     [Documentation]    Safe-delete a list of Policy API paths — replaces the per-suite

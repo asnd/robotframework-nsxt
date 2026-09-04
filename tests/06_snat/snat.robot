@@ -80,7 +80,7 @@ Verify Traffic Uses Translated Source IP
     [Documentation]    From VM1, make an HTTP request to an external reflector service and verify
     ...                the response contains the SNAT translated IP as the client address.
     ...                Requires an HTTP reflector (e.g., httpbin /ip) running at EXTERNAL_TEST_IP.
-    [Tags]    nat    snat    traffic    end-to-end
+    [Tags]    nat    snat    traffic    end-to-end    dataplane
     Verify Source IP From VM
     ...    ${VM1_IP}
     ...    ${EXTERNAL_TEST_IP}
