@@ -94,7 +94,6 @@ jobs:
           exit 1
         env:
           NO_PROXY: localhost,127.0.0.1
-          no_proxy: localhost,127.0.0.1
 
       - name: Run control-plane suites against the mock
         run: |
@@ -105,7 +104,6 @@ jobs:
             tests/08_dfw tests/09_alb_l7 tests/10_t0_vrf tests/11_failover
         env:
           NO_PROXY: localhost,127.0.0.1
-          no_proxy: localhost,127.0.0.1
 
       - name: Stop mock NSX Manager
         if: always()
