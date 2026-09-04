@@ -79,14 +79,14 @@ Example
 ```
 
 Everything under `nsxt_robot.NsxtLibrary` is plain Python (auth, retries, connection
-cache, all ~90 Policy/Mgmt API keywords); `common.robot`/`policy_api.robot` are now thin
+cache, all ~100 Policy/Mgmt API keywords); `common.robot`/`policy_api.robot` are now thin
 shims kept only for backward compatibility and shared variables (`${T0_PATH}` etc.) —
 see [Migration notes](#migration-notes-for-01x-users) if you're upgrading from `0.1.x`.
 
 ### Layout
 
 ```
-nsxt-robot/
+robotframework-nsxt/
 ├── pyproject.toml               # packaging (hatchling), deps, ruff/mypy/robocop config
 ├── env.example.yaml             # copy to env.yaml and edit (env.yaml is gitignored)
 ├── env.mock.yaml                # variables for running against mock_nsx/ instead of a lab
