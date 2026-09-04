@@ -350,6 +350,29 @@ unchanged — **no suite needs to change**. What's different if you're upgrading
 - New capability, not required: `Open Nsx Connection`/`Switch Nsx Connection`/`Close
   Nsx Connection` for multi-manager suites (see [Connection management](#connection-management)).
 
+## NSX version compatibility
+
+There is no VMware/Broadcom "NSX 5.x" — the version line went 4.0 → 4.1 → 4.2.x,
+then jumped straight to NSX 9.0; the 4.0 rename from "NSX-T Data Center" to "NSX"
+was cosmetic and introduced no API break. Compatibility notes for this library
+against that timeline:
+
+- Nearly every keyword (`routing.py`, `gateways.py`, `security.py`, `services.py`,
+  `realization.py`, `assertions.py`) targets the Policy API (`/policy/api/v1/infra/*`),
+  which is VMware's actively-recommended, forward-compatible surface.
+- Session-cookie auth (`/api/session/create`, `X-XSRF-TOKEN`) is unaffected by any
+  of the above changes and remains the current mechanism for both Manager and
+  Policy API calls.
+- `fabric.py`'s 6 read-only fabric/health GETs (cluster status, transport-zones,
+  transport-node status, compute-managers) are the only calls on the Management API
+  (`/api/v1/*`), which has carried a standing deprecation notice since NSX-T 3.2 with
+  no fixed removal date yet (as of NSX 4.2.4). This is the one module to revisit first
+  if a future NSX major removes Manager API support.
+- The `07_alb_l4`/`09_alb_l7` suites exercise NSX's native Policy-managed load
+  balancer (`/infra/lb-*`), not the separate NSX Advanced Load Balancer (Avi)
+  integration that Broadcom has deprecated — the suite names predate that
+  distinction and shouldn't be read as using the deprecated surface.
+
 ## Keyword docs
 
 Full keyword reference (all `NsxtLibrary`/`NsxtApi` keywords and `.robot` resources)
