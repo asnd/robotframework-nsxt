@@ -32,8 +32,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/asnd/nsxt-robot"
-Repository = "https://github.com/asnd/nsxt-robot"
+Homepage = "https://github.com/asnd/robotframework-nsxt"
+Repository = "https://github.com/asnd/robotframework-nsxt"
 
 [dependency-groups]
 dev = [
